@@ -90,14 +90,6 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function userDocExists(uid) {
-      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(uid));
-    }
-
-    function getUserData(uid) {
-      return get(/databases/$(database)/documents/users/$(uid)).data;
-    }
-
     // Active approved Admin check
     function isAdmin() {
       return request.auth != null &&
