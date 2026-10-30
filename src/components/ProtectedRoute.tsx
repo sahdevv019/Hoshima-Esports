@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import type { UserRole } from '../types/auth';
 import { ShieldAlert } from 'lucide-react';
@@ -78,9 +78,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           Your current authorization level (<strong>{role.toUpperCase()}</strong>) does not have clearance to view this
           terminal.
         </p>
-        <a href="/" className="btn-outline">
+        <Link to="/" className="btn-outline">
           Return to Hub
-        </a>
+        </Link>
       </div>
     );
   }

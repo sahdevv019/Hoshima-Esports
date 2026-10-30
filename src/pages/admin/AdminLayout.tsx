@@ -41,12 +41,14 @@ export const AdminLayout: React.FC = () => {
       <div
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
           gap: '8px',
           background: 'rgba(0, 0, 0, 0.4)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
           borderRadius: '8px',
           padding: '6px',
           width: 'fit-content',
+          maxWidth: '100%',
           marginBottom: '36px'
         }}
       >

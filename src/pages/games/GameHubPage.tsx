@@ -399,6 +399,7 @@ export const GameHubPage: React.FC = () => {
             <p style={{ color: '#5a7a9a', marginBottom: '24px' }}>Real-time coordination channel powered by Cloud Firestore.</p>
 
             <div
+              className="comms-container"
               style={{
                 display: 'grid',
                 gridTemplateColumns: '240px 1fr',
@@ -411,7 +412,10 @@ export const GameHubPage: React.FC = () => {
               }}
             >
               {/* Channel List */}
-              <div style={{ backgroundColor: 'var(--dark2)', padding: '16px', borderRight: '1px solid rgba(255,255,255,.06)' }}>
+              <div
+                className="comms-channels"
+                style={{ backgroundColor: 'var(--dark2)', padding: '16px', borderRight: '1px solid rgba(255,255,255,.06)' }}
+              >
                 <div style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: '#4a6a8a', marginBottom: '12px' }}>
                   Channels
                 </div>
@@ -438,7 +442,7 @@ export const GameHubPage: React.FC = () => {
               </div>
 
               {/* Chat Viewport */}
-              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div className="comms-viewport" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 {/* Header */}
                 <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontFamily: 'Orbitron, monospace', fontSize: '0.95rem', color: '#fff', fontWeight: 700 }}>

@@ -222,9 +222,10 @@ export const RecruitmentPage: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
               <div>
                 <label
+                  htmlFor="recruit-display-name"
                   style={{
                     display: 'block',
                     fontFamily: 'Rajdhani, sans-serif',
@@ -238,9 +239,11 @@ export const RecruitmentPage: React.FC = () => {
                   Display Name *
                 </label>
                 <input
+                  id="recruit-display-name"
                   type="text"
                   required
                   maxLength={50}
+                  autoComplete="name"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="e.g. John Doe"
@@ -258,6 +261,7 @@ export const RecruitmentPage: React.FC = () => {
 
               <div>
                 <label
+                  htmlFor="recruit-gaming-username"
                   style={{
                     display: 'block',
                     fontFamily: 'Rajdhani, sans-serif',
@@ -271,9 +275,13 @@ export const RecruitmentPage: React.FC = () => {
                   Gaming Username (IGN) *
                 </label>
                 <input
+                  id="recruit-gaming-username"
                   type="text"
                   required
                   maxLength={30}
+                  autoComplete="username"
+                  autoCorrect="off"
+                  autoCapitalize="off"
                   value={gamingUsername}
                   onChange={(e) => setGamingUsername(e.target.value)}
                   placeholder="e.g. PHANTOM_X"
@@ -290,9 +298,10 @@ export const RecruitmentPage: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
               <div>
                 <label
+                  htmlFor="recruit-preferred-game"
                   style={{
                     display: 'block',
                     fontFamily: 'Rajdhani, sans-serif',
@@ -306,6 +315,7 @@ export const RecruitmentPage: React.FC = () => {
                   Primary Competitive Game *
                 </label>
                 <select
+                  id="recruit-preferred-game"
                   value={preferredGame}
                   onChange={(e) => setPreferredGame(e.target.value)}
                   style={{
@@ -328,6 +338,7 @@ export const RecruitmentPage: React.FC = () => {
 
               <div>
                 <label
+                  htmlFor="recruit-in-game-id"
                   style={{
                     display: 'block',
                     fontFamily: 'Rajdhani, sans-serif',
@@ -341,9 +352,12 @@ export const RecruitmentPage: React.FC = () => {
                   In-Game ID / UID *
                 </label>
                 <input
+                  id="recruit-in-game-id"
                   type="text"
                   required
                   maxLength={40}
+                  autoCorrect="off"
+                  autoCapitalize="off"
                   value={inGameId}
                   onChange={(e) => setInGameId(e.target.value)}
                   placeholder="e.g. 5129381023 or Riot Tag"
@@ -362,6 +376,7 @@ export const RecruitmentPage: React.FC = () => {
 
             <div>
               <label
+                htmlFor="recruit-preferred-role"
                 style={{
                   display: 'block',
                   fontFamily: 'Rajdhani, sans-serif',
@@ -375,6 +390,7 @@ export const RecruitmentPage: React.FC = () => {
                 Preferred In-Game Role *
               </label>
               <input
+                id="recruit-preferred-role"
                 type="text"
                 required
                 maxLength={40}
@@ -395,6 +411,7 @@ export const RecruitmentPage: React.FC = () => {
 
             <div>
               <label
+                htmlFor="recruit-bio"
                 style={{
                   display: 'block',
                   fontFamily: 'Rajdhani, sans-serif',
@@ -408,10 +425,12 @@ export const RecruitmentPage: React.FC = () => {
                 Introduction & Experience * (10 to 300 characters)
               </label>
               <textarea
+                id="recruit-bio"
                 required
                 rows={3}
                 minLength={10}
                 maxLength={300}
+                aria-describedby="recruit-bio-hint"
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 placeholder="Briefly state your competitive achievements, past teams, and availability."
@@ -426,7 +445,7 @@ export const RecruitmentPage: React.FC = () => {
                   resize: 'none'
                 }}
               />
-              <span style={{ fontSize: '0.72rem', color: '#4a6a8a', float: 'right', marginTop: '4px' }}>
+              <span id="recruit-bio-hint" style={{ fontSize: '0.72rem', color: '#4a6a8a', float: 'right', marginTop: '4px' }}>
                 {bio.length} / 300
               </span>
             </div>

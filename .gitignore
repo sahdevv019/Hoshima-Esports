@@ -8,7 +8,17 @@ dist-ssr/
 # Environment variables
 .env
 .env.local
-.env*.local
+.env.*.local
+*.env.local
+
+# Private credentials & service accounts
+*.pem
+*.key
+*.cert
+*serviceAccount*.json
+*service-account*.json
+credentials.json
+firebase-adminsdk*.json
 
 # Logs
 npm-debug.log*

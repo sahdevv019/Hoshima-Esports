@@ -63,7 +63,7 @@ export const CaptainPage: React.FC = () => {
       </div>
 
       {/* Squad Lineup & Match Schedule Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '40px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', marginBottom: '40px' }}>
         <div
           style={{
             background: 'var(--dark2)',

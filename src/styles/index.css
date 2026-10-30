@@ -433,4 +433,19 @@ nav.hoshima-nav {
     flex-wrap: wrap;
     gap: 12px;
   }
+  .comms-container {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+  }
+  .comms-channels {
+    border-right: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+    display: flex !important;
+    overflow-x: auto !important;
+    gap: 8px !important;
+    padding: 10px 14px !important;
+  }
+  .comms-viewport {
+    height: 440px !important;
+  }
 }

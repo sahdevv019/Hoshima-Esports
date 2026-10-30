@@ -184,15 +184,17 @@ export const ProfilePage: React.FC = () => {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
+              <label htmlFor="profile-display-name" style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
                 Display Name (Max 50)
               </label>
               <input
+                id="profile-display-name"
                 type="text"
                 required
                 maxLength={50}
+                autoComplete="name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 style={{
@@ -208,13 +210,17 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
+              <label htmlFor="profile-gaming-username" style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
                 Gaming Tag / Username (Max 30)
               </label>
               <input
+                id="profile-gaming-username"
                 type="text"
                 required
                 maxLength={30}
+                autoComplete="username"
+                autoCorrect="off"
+                autoCapitalize="off"
                 value={gamingUsername}
                 onChange={(e) => setGamingUsername(e.target.value)}
                 style={{
@@ -230,12 +236,13 @@ export const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
+              <label htmlFor="profile-preferred-game" style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
                 Primary Game
               </label>
               <select
+                id="profile-preferred-game"
                 value={preferredGame}
                 onChange={(e) => setPreferredGame(e.target.value)}
                 style={{
@@ -257,12 +264,15 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
+              <label htmlFor="profile-in-game-id" style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
                 In-Game ID / UID (Max 40)
               </label>
               <input
+                id="profile-in-game-id"
                 type="text"
                 maxLength={40}
+                autoCorrect="off"
+                autoCapitalize="off"
                 value={inGameId}
                 onChange={(e) => setInGameId(e.target.value)}
                 placeholder="e.g. 5129381023"
@@ -280,10 +290,11 @@ export const ProfilePage: React.FC = () => {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
+            <label htmlFor="profile-preferred-role" style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
               Preferred Role / Position (Max 40)
             </label>
             <input
+              id="profile-preferred-role"
               type="text"
               maxLength={40}
               value={preferredRole}
@@ -302,12 +313,14 @@ export const ProfilePage: React.FC = () => {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
+            <label htmlFor="profile-bio" style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px', textTransform: 'uppercase' }}>
               Operative Bio (Max 300)
             </label>
             <textarea
+              id="profile-bio"
               rows={3}
               maxLength={300}
+              aria-describedby="profile-bio-hint"
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               style={{
@@ -321,6 +334,9 @@ export const ProfilePage: React.FC = () => {
                 resize: 'none'
               }}
             />
+            <span id="profile-bio-hint" style={{ fontSize: '0.72rem', color: '#4a6a8a', float: 'right', marginTop: '4px' }}>
+              {bio.length} / 300
+            </span>
           </div>
 
           <div>
