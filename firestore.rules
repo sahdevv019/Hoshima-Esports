@@ -1,0 +1,380 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (User's Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required, immutable) - Must match document ID and request.auth.uid
+    //   - email: string | null (optional/required on Google sign-in, immutable) - User's email address
+    //   - displayName: string (required, 1..50 chars) - Operative display name
+    //   - gamingUsername: string (required, 1..30 chars) - In-game handle/callsign
+    //   - preferredGame: string (required, 1..50 chars) - Primary game division (e.g., 'Free Fire Max')
+    //   - inGameId: string (optional, 1..40 chars) - Official gaming ID/code
+    //   - preferredRole: string (optional, 1..40 chars) - Strategic role (e.g., 'Assault', 'Sniper')
+    //   - bio: string (optional, 0..300 chars) - Short profile bio/intro
+    //   - color: string (optional, 1..30 chars) - UI theme/avatar hex or rgb color
+    //   - role: string (required, enum: ['admin', 'captain', 'member', 'pending']) - Privileged role
+    //   - status: string (required, enum: ['pending', 'approved', 'rejected', 'suspended']) - Account state
+    //   - assignedSquad: string (optional, 1..50 chars, admin-only) - Squad assigned to captain/member
+    //   - createdAt: timestamp (optional, immutable) - Creation timestamp
+    //   - updatedAt: timestamp (optional) - Modification timestamp
+    //   - approvedBy: string (optional, 1..128 chars, admin-only, immutable by user) - Approver UID
+    //   - approvedAt: timestamp (optional, admin-only, immutable by user) - Approval timestamp
+    //
+    // Collection: applications
+    // Document ID: userId (User's Firebase Auth UID)
+    // Fields:
+    //   - id: string (optional, matches userId) - Application ID
+    //   - uid: string (required, immutable) - User UID matching document ID and request.auth.uid
+    //   - email: string | null (optional) - User's email address
+    //   - displayName: string (required, 2..50 chars) - Applicant name
+    //   - gamingUsername: string (required, 2..30 chars) - Applicant in-game handle
+    //   - preferredGame: string (required, 1..50 chars) - Target team game
+    //   - inGameId: string (required, 1..40 chars) - Game identification ID
+    //   - preferredRole: string (required, 1..40 chars) - Preferred squad role
+    //   - bio: string (required, 10..300 chars) - Application introduction/motivation
+    //   - status: string (required, enum: ['pending', 'approved', 'rejected']) - Application status
+    //   - submittedAt: timestamp (optional) - Timestamp of submission
+    //   - reviewedBy: string (optional, admin-only, 1..128 chars) - Reviewing admin UID
+    //   - reviewedAt: timestamp (optional, admin-only) - Timestamp of review
+    //   - rejectionReason: string (optional, admin-only, 0..500 chars) - Reason if rejected
+    //
+    // Collection: roster
+    // Document ID: playerId (Auto-generated or custom string ID)
+    // Fields:
+    //   - name: string (required, 1..50 chars) - Player name
+    //   - tag: string (required, 1..20 chars) - Player team tag / in-game handle
+    //   - role: string (required, 1..40 chars) - Tactical role (e.g., 'Fragger', 'IGL')
+    //   - game: string (required, 1..50 chars) - Game category / squad name
+    //   - color: string (required, 1..30 chars) - Visual accent color
+    //   - uid: string (optional, 1..128 chars) - Linked Firebase user UID if applicable
+    //
+    // Collection: arcade
+    // Document ID: gameId (Auto-generated or custom string ID)
+    // Fields:
+    //   - title: string (required, 1..100 chars) - Title of arcade mini-game
+    //   - desc: string (required, 1..500 chars) - Description of gameplay
+    //   - url: string (required, 1..500 chars, valid HTTP/HTTPS URL) - External playable URL
+    //   - author: string (required, 1..50 chars) - Author/contributor name
+    //   - genre: string (required, 1..50 chars) - Game category/genre
+    //   - createdAt: timestamp (optional) - Creation timestamp
+    //
+    // Collection: chats_{gameId}_{channel} (Pattern: ^chats_[a-zA-Z0-9_-]+_[a-zA-Z0-9_-]+$)
+    // Document ID: messageId (Auto-generated document ID)
+    // Fields:
+    //   - name: string (required, 1..50 chars) - Sender display name
+    //   - avatar: string (required, 1..50 chars) - Sender avatar text/initials
+    //   - color: string (required, 1..30 chars) - Message accent color
+    //   - bg: string (optional, 1..50 chars) - Background bubble styling
+    //   - time: string (optional, 1..30 chars) - Client display time string
+    //   - text: string (required, 1..500 chars) - Message body
+    //   - uid: string (required, 1..128 chars) - Must match request.auth.uid
+    //   - timestamp: timestamp (optional) - Server creation timestamp
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function userDocExists(uid) {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function getUserData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    // Active approved Admin check
+    function isAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+    }
+
+    // Active approved Captain check
+    function isCaptain() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'captain' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+    }
+
+    // Active approved Member, Captain, or Admin check
+    function isApprovedMember() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'captain', 'member'];
+    }
+
+    // Verify captain's assigned squad matches target game
+    function isCaptainOfGame(game) {
+      return isCaptain() &&
+        ('assignedSquad' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedSquad == game;
+    }
+
+    // String length and type validation
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidOptionalString(data, field, minLen, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() >= minLen && data[field].size() <= maxLen);
+    }
+
+    function isValidOptionalTimestamp(data, field) {
+      return !(field in data) || data[field] is timestamp;
+    }
+
+    function isValidUrl(url) {
+      return url is string && url.size() <= 500 && (url.matches('^https?://.*'));
+    }
+
+    function isValidEmail(email) {
+      return email == null || (email is string && email.size() <= 100 && email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$'));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    // Validate User Profile document schema
+    function isValidUser(data) {
+      return data.keys().hasOnly([
+        'uid', 'email', 'displayName', 'gamingUsername',
+        'preferredGame', 'inGameId', 'preferredRole', 'bio',
+        'color', 'role', 'status', 'assignedSquad',
+        'createdAt', 'updatedAt', 'approvedBy', 'approvedAt'
+      ]) &&
+      data.keys().hasAll(['uid', 'displayName', 'gamingUsername', 'preferredGame', 'role', 'status']) &&
+      data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+      (!('email' in data) || isValidEmail(data.email)) &&
+      isValidString(data.displayName, 1, 50) &&
+      isValidString(data.gamingUsername, 1, 30) &&
+      isValidString(data.preferredGame, 1, 50) &&
+      isValidOptionalString(data, 'inGameId', 1, 40) &&
+      isValidOptionalString(data, 'preferredRole', 1, 40) &&
+      isValidOptionalString(data, 'bio', 0, 300) &&
+      isValidOptionalString(data, 'color', 1, 30) &&
+      data.role in ['admin', 'captain', 'member', 'pending'] &&
+      data.status in ['pending', 'approved', 'rejected', 'suspended'] &&
+      isValidOptionalString(data, 'assignedSquad', 1, 50) &&
+      isValidOptionalString(data, 'approvedBy', 1, 128) &&
+      isValidOptionalTimestamp(data, 'createdAt') &&
+      isValidOptionalTimestamp(data, 'updatedAt') &&
+      isValidOptionalTimestamp(data, 'approvedAt');
+    }
+
+    // Validate Application document schema
+    function isValidApplication(data) {
+      return data.keys().hasOnly([
+        'id', 'uid', 'email', 'displayName', 'gamingUsername',
+        'preferredGame', 'inGameId', 'preferredRole', 'bio',
+        'status', 'submittedAt', 'reviewedBy', 'reviewedAt', 'rejectionReason'
+      ]) &&
+      data.keys().hasAll(['uid', 'displayName', 'gamingUsername', 'preferredGame', 'inGameId', 'preferredRole', 'bio', 'status']) &&
+      data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+      isValidOptionalString(data, 'id', 1, 128) &&
+      (!('email' in data) || isValidEmail(data.email)) &&
+      isValidString(data.displayName, 2, 50) &&
+      isValidString(data.gamingUsername, 2, 30) &&
+      isValidString(data.preferredGame, 1, 50) &&
+      isValidString(data.inGameId, 1, 40) &&
+      isValidString(data.preferredRole, 1, 40) &&
+      isValidString(data.bio, 10, 300) &&
+      data.status in ['pending', 'approved', 'rejected'] &&
+      isValidOptionalTimestamp(data, 'submittedAt') &&
+      isValidOptionalString(data, 'reviewedBy', 1, 128) &&
+      isValidOptionalTimestamp(data, 'reviewedAt') &&
+      isValidOptionalString(data, 'rejectionReason', 0, 500);
+    }
+
+    // Validate Roster Player document schema
+    function isValidRosterPlayer(data) {
+      return data.keys().hasOnly(['name', 'tag', 'role', 'game', 'uid', 'color']) &&
+        data.keys().hasAll(['name', 'tag', 'role', 'game', 'color']) &&
+        isValidString(data.name, 1, 50) &&
+        isValidString(data.tag, 1, 20) &&
+        isValidString(data.role, 1, 40) &&
+        isValidString(data.game, 1, 50) &&
+        isValidString(data.color, 1, 30) &&
+        isValidOptionalString(data, 'uid', 1, 128);
+    }
+
+    // Validate Arcade Game document schema
+    function isValidArcadeGame(data) {
+      return data.keys().hasOnly(['title', 'desc', 'url', 'author', 'genre', 'createdAt']) &&
+        data.keys().hasAll(['title', 'desc', 'url', 'author', 'genre']) &&
+        isValidString(data.title, 1, 100) &&
+        isValidString(data.desc, 1, 500) &&
+        isValidUrl(data.url) &&
+        isValidString(data.author, 1, 50) &&
+        isValidString(data.genre, 1, 50) &&
+        isValidOptionalTimestamp(data, 'createdAt');
+    }
+
+    // Validate Chat Message document schema
+    function isValidChatMessage(data) {
+      return data.keys().hasOnly(['name', 'avatar', 'color', 'bg', 'time', 'text', 'uid', 'timestamp']) &&
+        data.keys().hasAll(['name', 'avatar', 'color', 'text', 'uid']) &&
+        isValidString(data.name, 1, 50) &&
+        isValidString(data.avatar, 1, 50) &&
+        isValidString(data.color, 1, 30) &&
+        isValidOptionalString(data, 'bg', 1, 50) &&
+        isValidOptionalString(data, 'time', 1, 30) &&
+        isValidString(data.text, 1, 500) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        isValidOptionalTimestamp(data, 'timestamp');
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // A. Users Collection
+    match /users/{userId} {
+      // Public read is denied; only profile owner and approved admins may read
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Creating a user profile:
+      // Owner only, non-admins MUST create profile with pending role and status
+      allow create: if isOwner(userId) &&
+        request.resource.data.uid == userId &&
+        (isAdmin() || (request.resource.data.role == 'pending' && request.resource.data.status == 'pending')) &&
+        (isAdmin() || (!('approvedBy' in request.resource.data) && !('approvedAt' in request.resource.data) && !('assignedSquad' in request.resource.data))) &&
+        isValidUser(request.resource.data);
+
+      // Updating a user profile:
+      allow update: if isValidUser(request.resource.data) && (
+        // Case 1: Owner updating safe profile fields
+        (
+          isOwner(userId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'displayName', 'gamingUsername', 'preferredGame',
+            'inGameId', 'preferredRole', 'bio', 'color', 'updatedAt'
+          ]) &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.status == resource.data.status &&
+          request.resource.data.uid == resource.data.uid &&
+          (!('email' in resource.data) || request.resource.data.email == resource.data.email)
+        ) ||
+        // Case 2: Active Admin updating roles/status/squads
+        (
+          isAdmin() &&
+          request.resource.data.uid == resource.data.uid &&
+          (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt) &&
+          // CRITICAL INVARIANT: The last active admin cannot be removed or demoted through client writes!
+          // If the target is an admin, role MUST remain 'admin' and status MUST remain 'approved'.
+          (resource.data.role != 'admin' || (request.resource.data.role == 'admin' && request.resource.data.status == 'approved'))
+        )
+      );
+
+      // User document deletion is strictly forbidden
+      allow delete: if false;
+    }
+
+    // B. Applications Collection
+    match /applications/{userId} {
+      // Owner can read their own application; Admins can read/list all applications
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Applications created by applicant owner with 'pending' status only
+      allow create: if isOwner(userId) &&
+        request.resource.data.uid == userId &&
+        request.resource.data.status == 'pending' &&
+        !('reviewedBy' in request.resource.data) &&
+        !('reviewedAt' in request.resource.data) &&
+        !('rejectionReason' in request.resource.data) &&
+        isValidApplication(request.resource.data);
+
+      // Updating applications:
+      allow update: if isValidApplication(request.resource.data) && (
+        // Case 1: Applicant updating pending submission
+        (
+          isOwner(userId) &&
+          resource.data.status == 'pending' &&
+          request.resource.data.status == 'pending' &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'reviewedBy', 'reviewedAt', 'rejectionReason'
+          ]) &&
+          request.resource.data.uid == resource.data.uid
+        ) ||
+        // Case 2: Admin reviewing application
+        (
+          isAdmin() &&
+          request.resource.data.uid == resource.data.uid &&
+          request.resource.data.status in ['approved', 'rejected', 'pending']
+        )
+      );
+
+      // Application deletion is denied
+      allow delete: if false;
+    }
+
+    // C. Roster Collection
+    match /roster/{playerId} {
+      // Public read allowed for website visitors
+      allow read: if true;
+
+      // Create: Admin or Captain for player's specific squad
+      allow create: if (isAdmin() || isCaptainOfGame(request.resource.data.game)) &&
+        isValidRosterPlayer(request.resource.data);
+
+      // Update: Admin or Captain for player's specific squad (cannot change squad to another game)
+      allow update: if (
+        isAdmin() ||
+        (isCaptainOfGame(resource.data.game) && isCaptainOfGame(request.resource.data.game))
+      ) && isValidRosterPlayer(request.resource.data);
+
+      // Delete: Admin or Captain for player's specific squad
+      allow delete: if isAdmin() || isCaptainOfGame(resource.data.game);
+    }
+
+    // D. Arcade Collection
+    match /arcade/{gameId} {
+      // Public read allowed for website visitors
+      allow read: if true;
+
+      // Create: Approved members, captains, and admins
+      allow create: if isApprovedMember() && isValidArcadeGame(request.resource.data);
+
+      // Update & Delete: Admin only
+      allow update: if isAdmin() && isValidArcadeGame(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // E. Game Channels Chat Collections: chats_{gameId}_{channel}
+    match /{chatCollection}/{messageId} {
+      allow read: if chatCollection.matches('^chats_[a-zA-Z0-9_-]+_[a-zA-Z0-9_-]+$') &&
+        isApprovedMember();
+
+      allow create: if chatCollection.matches('^chats_[a-zA-Z0-9_-]+_[a-zA-Z0-9_-]+$') &&
+        isApprovedMember() &&
+        request.resource.data.uid == request.auth.uid &&
+        isValidChatMessage(request.resource.data);
+
+      allow update, delete: if false;
+    }
+
+    // F. Default Deny: All other paths and subcollections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
