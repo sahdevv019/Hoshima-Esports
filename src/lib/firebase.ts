@@ -43,5 +43,7 @@ if (useEmulator && typeof window !== 'undefined') {
 export const isFirebaseConfigured = Boolean(
   import.meta.env.VITE_FIREBASE_API_KEY && 
   import.meta.env.VITE_FIREBASE_PROJECT_ID && 
-  !import.meta.env.VITE_FIREBASE_API_KEY.includes('your-api-key')
+  !import.meta.env.VITE_FIREBASE_API_KEY.includes('your-api-key') &&
+  !import.meta.env.VITE_FIREBASE_API_KEY.includes('DUMMYKEY') &&
+  import.meta.env.VITE_FIREBASE_PROJECT_ID !== 'hoshima-esports-dev'
 );

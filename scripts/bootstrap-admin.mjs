@@ -14,6 +14,31 @@
 
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, connectFirestoreEmulator } from 'firebase/firestore';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Automatically load .env.local if present
+function loadEnvFile(filename) {
+  const envPath = path.resolve(process.cwd(), filename);
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, 'utf8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx > 0) {
+        const key = trimmed.slice(0, eqIdx).trim();
+        const val = trimmed.slice(eqIdx + 1).trim();
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    }
+  }
+}
+
+loadEnvFile('.env.local');
+loadEnvFile('.env');
 
 const targetUid = process.argv[2]?.trim();
 
@@ -33,11 +58,11 @@ if (targetUid.length < 10 || !/^[A-Za-z0-9_-]+$/.test(targetUid)) {
 
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY || 'AIzaSyDUMMYKEYFORDEVELOPMENTANDTESTING000',
-  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || 'hoshima-esports-dev.firebaseapp.com',
-  projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'hoshima-esports-dev',
-  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || 'hoshima-esports-dev.appspot.com',
-  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789012',
-  appId: process.env.VITE_FIREBASE_APP_ID || '1:123456789012:web:abcdef1234567890'
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || 'red-phoenix-bd7f7.firebaseapp.com',
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'red-phoenix-bd7f7',
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || 'red-phoenix-bd7f7.firebasestorage.app',
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '758310625150',
+  appId: process.env.VITE_FIREBASE_APP_ID || '1:758310625150:web:39010fa2adcf17fac51d2f'
 };
 
 const app = initializeApp(firebaseConfig);
@@ -56,6 +81,7 @@ async function bootstrapAdmin() {
   console.log(`  HOSHIMA ESPORTS — FIRST ADMIN BOOTSTRAP PROCEDURE  `);
   console.log(`======================================================`);
   console.log(`Target Operative UID: ${targetUid}`);
+  console.log(`Target Project ID:    ${firebaseConfig.projectId}`);
 
   const userRef = doc(db, 'users', targetUid);
   const userSnap = await getDoc(userRef);
