@@ -84,7 +84,7 @@ export const DashboardPage: React.FC = () => {
               View today's scheduled 4v4 and full-lobby practice matches for all games.
             </p>
           </div>
-          <Link to="/game/ff" className="btn-primary" style={{ padding: '10px 18px', fontSize: '0.88rem' }}>
+          <Link to="/scrims" className="btn-primary" style={{ padding: '10px 18px', fontSize: '0.88rem' }}>
             Enter Scrim Lobbies <ArrowRight size={14} />
           </Link>
         </div>
