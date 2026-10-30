@@ -76,6 +76,126 @@ service cloud.firestore {
     //   - uid: string (required, 1..128 chars) - Must match request.auth.uid
     //   - timestamp: timestamp (optional) - Server creation timestamp
     //
+    // Collection: scrims
+    // Document ID: scrimId (Auto-generated document ID)
+    // Fields:
+    //   - title: string (required, 1..100 chars) - Scrim drill title
+    //   - game: string (required, enum: ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'])
+    //   - squad: string (required, 1..50 chars) - Hosting squad division
+    //   - map: string (required, 1..50 chars) - Tactical map name
+    //   - format: string (required, 1..50 chars) - Match format
+    //   - scheduledTime: timestamp | string (required) - Scheduled match date/time
+    //   - registrationDeadline: timestamp | string (required) - Cut-off deadline
+    //   - maxParticipants: int (required, 2..100) - Maximum team slots
+    //   - currentParticipants: int (required, 0..100) - Currently registered teams
+    //   - rules: string (required, 1..1000 chars) - Rules and requirements
+    //   - description: string (optional, 0..1000 chars) - Operational description
+    //   - status: string (required, enum: ['scheduled', 'registration-open', 'registration-closed', 'live', 'completed', 'cancelled'])
+    //   - createdBy: string (required, 1..128 chars, immutable) - Creator UID
+    //   - creatorName: string (required, 1..50 chars) - Creator display name
+    //   - creatorRole: string (required, enum: ['admin', 'captain']) - Role of creator
+    //   - createdAt: timestamp (optional, immutable) - Creation timestamp
+    //   - updatedAt: timestamp (optional) - Last update timestamp
+    //   - hasResults: bool (optional) - Flag indicating verified results recorded
+    //
+    // Collection: scrim_registrations
+    // Document ID: registrationId (Format: `${scrimId}_${userId}`)
+    // Fields:
+    //   - id: string (required, 1..128 chars) - Registration ID matching doc id
+    //   - scrimId: string (required, 1..128 chars, immutable) - Target scrim ID
+    //   - game: string (required, enum: ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'])
+    //   - userId: string (required, 1..128 chars, immutable) - Registrant UID
+    //   - userName: string (required, 1..50 chars) - Registrant handle/name
+    //   - teamName: string (required, 1..50 chars) - Team/Squad name
+    //   - contact: string (required, 1..100 chars) - Contact coordinate (Discord/IGN)
+    //   - playerUids: list<string> (optional, max 10 uids) - Team lineup UIDs
+    //   - status: string (required, enum: ['registered', 'withdrawn', 'confirmed'])
+    //   - registeredAt: timestamp (optional, immutable) - Registration timestamp
+    //   - withdrawnAt: timestamp (optional) - Timestamp of withdrawal
+    //
+    // Collection: tournaments
+    // Document ID: tournamentId (Auto-generated document ID)
+    // Fields:
+    //   - name: string (required, 1..100 chars) - Tournament title
+    //   - game: string (required, enum: ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'])
+    //   - description: string (required, 1..2000 chars) - Tournament overview
+    //   - startDate: timestamp | string (required) - Tournament start date
+    //   - endDate: timestamp | string (required) - Tournament conclusion date
+    //   - registrationDeadline: timestamp | string (required) - Registration deadline
+    //   - maxTeams: int (required, 2..128) - Bracket capacity
+    //   - currentTeams: int (required, 0..128) - Currently registered teams
+    //   - format: string (required, enum: ['single-elimination', 'round-robin'])
+    //   - rules: string (required, 1..2000 chars) - Official competition rulebook
+    //   - prizePool: string (required, 1..100 chars) - Prize pool description/amount
+    //   - bannerUrl: string (optional, 1..500 chars) - Visual banner asset URL
+    //   - status: string (required, enum: ['upcoming', 'registration-open', 'registration-closed', 'in-progress', 'completed', 'cancelled'])
+    //   - createdBy: string (required, 1..128 chars) - Creator admin UID
+    //   - creatorName: string (optional, 1..50 chars) - Admin name
+    //   - champion: string (optional, 1..100 chars) - Winning team
+    //   - runnerUp: string (optional, 1..100 chars) - Second place team
+    //   - createdAt: timestamp (optional, immutable) - Creation timestamp
+    //   - updatedAt: timestamp (optional) - Last update timestamp
+    //
+    // Collection: tournament_registrations
+    // Document ID: registrationId (Format: `${tournamentId}_${captainUid}`)
+    // Fields:
+    //   - id: string (required, 1..128 chars) - Matches doc ID
+    //   - tournamentId: string (required, 1..128 chars, immutable) - Target tournament ID
+    //   - game: string (required, enum: ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'])
+    //   - captainUid: string (required, 1..128 chars, immutable) - Captain UID
+    //   - captainName: string (required, 1..50 chars) - Captain display name
+    //   - teamName: string (required, 1..50 chars) - Team name
+    //   - contact: string (required, 1..100 chars) - Contact handle/Discord
+    //   - roster: list<map> (required, 1..10 members) - Squad member list
+    //   - status: string (required, enum: ['registered', 'approved', 'rejected', 'withdrawn'])
+    //   - registeredAt: timestamp (optional, immutable) - Submission timestamp
+    //   - approvedAt: timestamp (optional, admin-only) - Admin approval timestamp
+    //   - reviewedBy: string (optional, 1..128 chars, admin-only) - Reviewing admin UID
+    //   - seed: int (optional, 1..128, admin-only) - Bracket seed number
+    //
+    // Collection: matches
+    // Document ID: matchId (Auto-generated document ID)
+    // Fields:
+    //   - competitionType: string (required, enum: ['scrim', 'tournament'])
+    //   - competitionId: string (required, 1..128 chars) - Parent scrim/tournament ID
+    //   - game: string (required, enum: ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'])
+    //   - round: string | int (optional) - Bracket round identifier
+    //   - matchNumber: int (optional, >= 1) - Sequential match number
+    //   - teamA: map (required, has keys 'id', 'name') - Participant Team A
+    //   - teamB: map (required, has keys 'id', 'name') - Participant Team B
+    //   - status: string (required, enum: ['scheduled', 'in-progress', 'completed', 'cancelled'])
+    //   - winnerId: string (optional, 1..128 chars) - Winning team ID
+    //   - winnerName: string (optional, 1..50 chars) - Winning team name
+    //   - scheduledTime: timestamp | string (optional) - Match time
+    //   - completedAt: timestamp (optional) - Match completion timestamp
+    //   - proposedBy: string (optional, 1..128 chars) - Captain proposer UID
+    //   - confirmedBy: string (optional, 1..128 chars) - Admin confirmer UID
+    //   - isConfirmed: bool (required) - True when officially verified
+    //   - playerStats: list<map> (optional, max 50 items) - Performance stat line
+    //   - map: string (optional, 1..50 chars) - Map played
+    //   - createdAt: timestamp (optional, immutable) - Creation timestamp
+    //   - updatedAt: timestamp (optional) - Last update timestamp
+    //
+    // Collection: player_stats
+    // Document ID: uid (Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required, 1..128 chars, immutable) - Matches document ID
+    //   - displayName: string (required, 1..50 chars) - Player operative name
+    //   - gamingUsername: string (required, 1..30 chars) - In-game handle
+    //   - game: string (required, enum: ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'])
+    //   - squad: string (required, 1..50 chars) - Squad division
+    //   - matchesPlayed: int (required, >= 0) - Total matches played
+    //   - wins: int (required, >= 0) - Total victories
+    //   - losses: int (required, >= 0) - Total defeats
+    //   - winRate: number (required, 0..100) - Win rate percentage
+    //   - totalKills: int (required, >= 0) - Total frags/kills
+    //   - totalDeaths: int (required, >= 0) - Total deaths
+    //   - kdRatio: number (required, >= 0) - Kill/Death ratio
+    //   - tournamentsWon: int (required, >= 0) - Championship count
+    //   - tournamentAppearances: int (required, >= 0) - Tournament count
+    //   - recentForm: list<string> (optional, max 20 items) - Form history ['W', 'L']
+    //   - updatedAt: timestamp (optional) - Timestamp of last stat recomputation
+    //
     // ===============================================================
 
     // ===============================================================
@@ -132,6 +252,11 @@ service cloud.firestore {
 
     function isValidOptionalTimestamp(data, field) {
       return !(field in data) || data[field] is timestamp;
+    }
+
+    // Supports both Firestore Timestamp and ISO date string representations
+    function isValidDateOrTimestamp(val) {
+      return val is timestamp || (val is string && val.size() >= 10 && val.size() <= 40);
     }
 
     function isValidUrl(url) {
@@ -233,6 +358,191 @@ service cloud.firestore {
         isValidString(data.text, 1, 500) &&
         data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
         isValidOptionalTimestamp(data, 'timestamp');
+    }
+
+    // Validate Scrim document schema
+    function isValidScrim(data) {
+      return data.keys().hasOnly([
+        'title', 'game', 'squad', 'map', 'format',
+        'scheduledTime', 'registrationDeadline', 'maxParticipants',
+        'currentParticipants', 'rules', 'description', 'status',
+        'createdBy', 'creatorName', 'creatorRole', 'createdAt',
+        'updatedAt', 'hasResults'
+      ]) &&
+      data.keys().hasAll([
+        'title', 'game', 'squad', 'map', 'format',
+        'scheduledTime', 'registrationDeadline', 'maxParticipants',
+        'currentParticipants', 'rules', 'status', 'createdBy',
+        'creatorName', 'creatorRole'
+      ]) &&
+      isValidString(data.title, 1, 100) &&
+      data.game in ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'] &&
+      isValidString(data.squad, 1, 50) &&
+      isValidString(data.map, 1, 50) &&
+      isValidString(data.format, 1, 50) &&
+      isValidDateOrTimestamp(data.scheduledTime) &&
+      isValidDateOrTimestamp(data.registrationDeadline) &&
+      data.maxParticipants is int && data.maxParticipants >= 2 && data.maxParticipants <= 100 &&
+      data.currentParticipants is int && data.currentParticipants >= 0 && data.currentParticipants <= 100 &&
+      isValidString(data.rules, 1, 1000) &&
+      isValidOptionalString(data, 'description', 0, 1000) &&
+      data.status in ['scheduled', 'registration-open', 'registration-closed', 'live', 'completed', 'cancelled'] &&
+      isValidString(data.createdBy, 1, 128) &&
+      isValidString(data.creatorName, 1, 50) &&
+      data.creatorRole in ['admin', 'captain'] &&
+      isValidOptionalTimestamp(data, 'createdAt') &&
+      isValidOptionalTimestamp(data, 'updatedAt') &&
+      (!('hasResults' in data) || data.hasResults is bool);
+    }
+
+    // Validate Scrim Registration document schema
+    function isValidScrimRegistration(data) {
+      return data.keys().hasOnly([
+        'id', 'scrimId', 'game', 'userId', 'userName',
+        'teamName', 'contact', 'playerUids', 'status',
+        'registeredAt', 'withdrawnAt'
+      ]) &&
+      data.keys().hasAll([
+        'id', 'scrimId', 'game', 'userId', 'userName',
+        'teamName', 'contact', 'status'
+      ]) &&
+      isValidString(data.id, 1, 128) &&
+      isValidString(data.scrimId, 1, 128) &&
+      data.game in ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'] &&
+      isValidString(data.userId, 1, 128) &&
+      isValidString(data.userName, 1, 50) &&
+      isValidString(data.teamName, 1, 50) &&
+      isValidString(data.contact, 1, 100) &&
+      (!('playerUids' in data) || (data.playerUids is list && data.playerUids.size() <= 10)) &&
+      data.status in ['registered', 'withdrawn', 'confirmed'] &&
+      isValidOptionalTimestamp(data, 'registeredAt') &&
+      isValidOptionalTimestamp(data, 'withdrawnAt');
+    }
+
+    // Validate Tournament document schema
+    function isValidTournament(data) {
+      return data.keys().hasOnly([
+        'name', 'game', 'description', 'startDate', 'endDate',
+        'registrationDeadline', 'maxTeams', 'currentTeams', 'format',
+        'rules', 'prizePool', 'bannerUrl', 'status', 'createdBy',
+        'creatorName', 'champion', 'runnerUp', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasAll([
+        'name', 'game', 'description', 'startDate', 'endDate',
+        'registrationDeadline', 'maxTeams', 'currentTeams', 'format',
+        'rules', 'prizePool', 'status', 'createdBy'
+      ]) &&
+      isValidString(data.name, 1, 100) &&
+      data.game in ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'] &&
+      isValidString(data.description, 1, 2000) &&
+      isValidDateOrTimestamp(data.startDate) &&
+      isValidDateOrTimestamp(data.endDate) &&
+      isValidDateOrTimestamp(data.registrationDeadline) &&
+      data.maxTeams is int && data.maxTeams >= 2 && data.maxTeams <= 128 &&
+      data.currentTeams is int && data.currentTeams >= 0 && data.currentTeams <= 128 &&
+      data.format in ['single-elimination', 'round-robin'] &&
+      isValidString(data.rules, 1, 2000) &&
+      isValidString(data.prizePool, 1, 100) &&
+      isValidOptionalString(data, 'bannerUrl', 1, 500) &&
+      data.status in ['upcoming', 'registration-open', 'registration-closed', 'in-progress', 'completed', 'cancelled'] &&
+      isValidString(data.createdBy, 1, 128) &&
+      isValidOptionalString(data, 'creatorName', 1, 50) &&
+      isValidOptionalString(data, 'champion', 1, 100) &&
+      isValidOptionalString(data, 'runnerUp', 1, 100) &&
+      isValidOptionalTimestamp(data, 'createdAt') &&
+      isValidOptionalTimestamp(data, 'updatedAt');
+    }
+
+    // Validate Tournament Registration document schema
+    function isValidTournamentRegistration(data) {
+      return data.keys().hasOnly([
+        'id', 'tournamentId', 'game', 'captainUid', 'captainName',
+        'teamName', 'contact', 'roster', 'status', 'registeredAt',
+        'approvedAt', 'reviewedBy', 'seed'
+      ]) &&
+      data.keys().hasAll([
+        'id', 'tournamentId', 'game', 'captainUid', 'captainName',
+        'teamName', 'contact', 'roster', 'status'
+      ]) &&
+      isValidString(data.id, 1, 128) &&
+      isValidString(data.tournamentId, 1, 128) &&
+      data.game in ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'] &&
+      isValidString(data.captainUid, 1, 128) &&
+      isValidString(data.captainName, 1, 50) &&
+      isValidString(data.teamName, 1, 50) &&
+      isValidString(data.contact, 1, 100) &&
+      data.roster is list && data.roster.size() >= 1 && data.roster.size() <= 10 &&
+      data.status in ['registered', 'approved', 'rejected', 'withdrawn'] &&
+      isValidOptionalTimestamp(data, 'registeredAt') &&
+      isValidOptionalTimestamp(data, 'approvedAt') &&
+      isValidOptionalString(data, 'reviewedBy', 1, 128) &&
+      (!('seed' in data) || (data.seed is int && data.seed >= 1 && data.seed <= 128));
+    }
+
+    // Validate Match document schema
+    function isValidMatch(data) {
+      return data.keys().hasOnly([
+        'competitionType', 'competitionId', 'game', 'round',
+        'matchNumber', 'teamA', 'teamB', 'status', 'winnerId',
+        'winnerName', 'scheduledTime', 'completedAt', 'proposedBy',
+        'confirmedBy', 'isConfirmed', 'playerStats', 'map',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasAll([
+        'competitionType', 'competitionId', 'game', 'teamA',
+        'teamB', 'status', 'isConfirmed'
+      ]) &&
+      data.competitionType in ['scrim', 'tournament'] &&
+      isValidString(data.competitionId, 1, 128) &&
+      data.game in ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'] &&
+      data.teamA is map && data.teamB is map &&
+      data.teamA.keys().hasAll(['id', 'name']) &&
+      data.teamB.keys().hasAll(['id', 'name']) &&
+      data.status in ['scheduled', 'in-progress', 'completed', 'cancelled'] &&
+      data.isConfirmed is bool &&
+      (!('round' in data) || data.round is string || data.round is int) &&
+      (!('matchNumber' in data) || (data.matchNumber is int && data.matchNumber >= 1)) &&
+      isValidOptionalString(data, 'winnerId', 1, 128) &&
+      isValidOptionalString(data, 'winnerName', 1, 50) &&
+      (!('scheduledTime' in data) || isValidDateOrTimestamp(data.scheduledTime)) &&
+      isValidOptionalTimestamp(data, 'completedAt') &&
+      isValidOptionalString(data, 'proposedBy', 1, 128) &&
+      isValidOptionalString(data, 'confirmedBy', 1, 128) &&
+      (!('playerStats' in data) || (data.playerStats is list && data.playerStats.size() <= 50)) &&
+      isValidOptionalString(data, 'map', 1, 50) &&
+      isValidOptionalTimestamp(data, 'createdAt') &&
+      isValidOptionalTimestamp(data, 'updatedAt');
+    }
+
+    // Validate Player Stats document schema
+    function isValidPlayerStats(data) {
+      return data.keys().hasOnly([
+        'uid', 'displayName', 'gamingUsername', 'game', 'squad',
+        'matchesPlayed', 'wins', 'losses', 'winRate', 'totalKills',
+        'totalDeaths', 'kdRatio', 'tournamentsWon', 'tournamentAppearances',
+        'recentForm', 'updatedAt'
+      ]) &&
+      data.keys().hasAll([
+        'uid', 'displayName', 'gamingUsername', 'game', 'squad',
+        'matchesPlayed', 'wins', 'losses', 'winRate', 'totalKills',
+        'totalDeaths', 'kdRatio', 'tournamentsWon', 'tournamentAppearances'
+      ]) &&
+      isValidString(data.uid, 1, 128) &&
+      isValidString(data.displayName, 1, 50) &&
+      isValidString(data.gamingUsername, 1, 30) &&
+      data.game in ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'] &&
+      isValidString(data.squad, 1, 50) &&
+      data.matchesPlayed is int && data.matchesPlayed >= 0 &&
+      data.wins is int && data.wins >= 0 &&
+      data.losses is int && data.losses >= 0 &&
+      (data.winRate is int || data.winRate is float) && data.winRate >= 0 && data.winRate <= 100 &&
+      data.totalKills is int && data.totalKills >= 0 &&
+      data.totalDeaths is int && data.totalDeaths >= 0 &&
+      (data.kdRatio is int || data.kdRatio is float) && data.kdRatio >= 0 &&
+      data.tournamentsWon is int && data.tournamentsWon >= 0 &&
+      data.tournamentAppearances is int && data.tournamentAppearances >= 0 &&
+      (!('recentForm' in data) || (data.recentForm is list && data.recentForm.size() <= 20)) &&
+      isValidOptionalTimestamp(data, 'updatedAt');
     }
 
     // ===============================================================
@@ -364,7 +674,159 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // F. Default Deny: All other paths and subcollections
+    // F. Scrims Collection
+    match /scrims/{scrimId} {
+      // Public discovery of competitive scrimmage drills
+      allow read: if true;
+
+      // Create: Admin or Division Captain for their assigned game
+      allow create: if isValidScrim(request.resource.data) && (
+        isAdmin() ||
+        (
+          isCaptainOfGame(request.resource.data.game) &&
+          request.resource.data.createdBy == request.auth.uid &&
+          request.resource.data.creatorRole == 'captain'
+        )
+      );
+
+      // Update: Admin, Scrim Creator Captain, or Approved Member updating slot count
+      allow update: if isValidScrim(request.resource.data) && (
+        // Case 1: Active Admin
+        isAdmin() ||
+        // Case 2: Captain of the division who created the scrim
+        (
+          isCaptainOfGame(resource.data.game) &&
+          isCaptainOfGame(request.resource.data.game) &&
+          resource.data.createdBy == request.auth.uid &&
+          request.resource.data.createdBy == resource.data.createdBy &&
+          (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt)
+        ) ||
+        // Case 3: Approved Member registering/withdrawing (affects participant counter and timestamp)
+        (
+          isApprovedMember() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentParticipants', 'updatedAt'])
+        )
+      );
+
+      // Delete: Admin or Scrim Creator Captain
+      allow delete: if isAdmin() || (
+        isCaptainOfGame(resource.data.game) &&
+        resource.data.createdBy == request.auth.uid
+      );
+    }
+
+    // G. Scrim Registrations Collection
+    match /scrim_registrations/{registrationId} {
+      // Public and member transparent discovery of registered rosters
+      allow read: if true;
+
+      // Create: Approved member registering themselves with 'registered' status
+      allow create: if isApprovedMember() &&
+        request.resource.data.userId == request.auth.uid &&
+        registrationId == request.resource.data.scrimId + '_' + request.auth.uid &&
+        request.resource.data.status == 'registered' &&
+        (!('withdrawnAt' in request.resource.data)) &&
+        isValidScrimRegistration(request.resource.data);
+
+      // Update: Admin or registrant withdrawing their registration
+      allow update: if isValidScrimRegistration(request.resource.data) && (
+        isAdmin() ||
+        (
+          isOwner(resource.data.userId) &&
+          request.resource.data.status == 'withdrawn' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'withdrawnAt'])
+        )
+      );
+
+      // Delete: Admin only
+      allow delete: if isAdmin();
+    }
+
+    // H. Tournaments Collection
+    match /tournaments/{tournamentId} {
+      // Public discovery of tournament brackets, schedules, and prize pools
+      allow read: if true;
+
+      // Create, Update, Delete: Admin only
+      allow create: if isAdmin() && isValidTournament(request.resource.data);
+      allow update: if isAdmin() && isValidTournament(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // I. Tournament Registrations Collection
+    match /tournament_registrations/{registrationId} {
+      // Public discovery of verified tournament team registrations & seeds
+      allow read: if true;
+
+      // Create: Division captain or admin registering team with 'registered' status
+      allow create: if (isAdmin() || isCaptainOfGame(request.resource.data.game)) &&
+        request.resource.data.captainUid == request.auth.uid &&
+        registrationId == request.resource.data.tournamentId + '_' + request.auth.uid &&
+        request.resource.data.status == 'registered' &&
+        (!('approvedAt' in request.resource.data) || isAdmin()) &&
+        (!('reviewedBy' in request.resource.data) || isAdmin()) &&
+        (!('seed' in request.resource.data) || isAdmin()) &&
+        isValidTournamentRegistration(request.resource.data);
+
+      // Update: Admin (review, seed, approve/reject) or Captain withdrawing
+      allow update: if isValidTournamentRegistration(request.resource.data) && (
+        isAdmin() ||
+        (
+          isOwner(resource.data.captainUid) &&
+          request.resource.data.status == 'withdrawn' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'contact'])
+        )
+      );
+
+      // Delete: Admin only
+      allow delete: if isAdmin();
+    }
+
+    // J. Matches Collection
+    match /matches/{matchId} {
+      // Public discovery of match schedules, scores, and verified results
+      allow read: if true;
+
+      // Create: Admin or Division Captain for scrim matches
+      allow create: if (
+        isAdmin() ||
+        (isCaptainOfGame(request.resource.data.game) && request.resource.data.competitionType == 'scrim')
+      ) && isValidMatch(request.resource.data);
+
+      // Update: Admin or Captain proposing unconfirmed scrim scores
+      allow update: if isValidMatch(request.resource.data) && (
+        isAdmin() ||
+        (
+          isCaptainOfGame(resource.data.game) &&
+          isCaptainOfGame(request.resource.data.game) &&
+          request.resource.data.isConfirmed == false &&
+          request.resource.data.proposedBy == request.auth.uid &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['confirmedBy', 'isConfirmed'])
+        )
+      );
+
+      // Delete: Admin only
+      allow delete: if isAdmin();
+    }
+
+    // K. Player Stats Collection
+    match /player_stats/{uid} {
+      // Public discovery of official player stats and leaderboards
+      allow read: if true;
+
+      // Create, Update, Delete: Admin only
+      allow create: if isAdmin() &&
+        request.resource.data.uid == uid &&
+        isValidPlayerStats(request.resource.data);
+
+      allow update: if isAdmin() &&
+        request.resource.data.uid == resource.data.uid &&
+        isValidPlayerStats(request.resource.data);
+
+      allow delete: if isAdmin();
+    }
+
+    // L. Default Deny: All other paths and subcollections
     match /{document=**} {
       allow read, write: if false;
     }

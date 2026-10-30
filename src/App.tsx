@@ -12,6 +12,11 @@ import { AchievementsPage } from './pages/public/AchievementsPage';
 import { RecruitmentPage } from './pages/public/RecruitmentPage';
 import { LoginPage } from './pages/public/LoginPage';
 import { GameHubPage } from './pages/games/GameHubPage';
+import { ScrimsDashboardPage } from './pages/scrims/ScrimsDashboardPage';
+import { ScrimDetailsPage } from './pages/scrims/ScrimDetailsPage';
+import { TournamentsDashboardPage } from './pages/tournaments/TournamentsDashboardPage';
+import { TournamentDetailsPage } from './pages/tournaments/TournamentDetailsPage';
+import { LeaderboardsPage } from './pages/public/LeaderboardsPage';
 
 // Account Pages
 import { PendingPage } from './pages/account/PendingPage';
@@ -38,6 +43,11 @@ export const App: React.FC = () => {
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/teams" element={<TeamsPage />} />
+              <Route path="/scrims" element={<ScrimsDashboardPage />} />
+              <Route path="/scrims/:scrimId" element={<ScrimDetailsPage />} />
+              <Route path="/tournaments" element={<TournamentsDashboardPage />} />
+              <Route path="/tournaments/:tournamentId" element={<TournamentDetailsPage />} />
+              <Route path="/leaderboards" element={<LeaderboardsPage />} />
               <Route path="/achievements" element={<AchievementsPage />} />
               <Route path="/recruitment" element={<RecruitmentPage />} />
               <Route path="/login" element={<LoginPage />} />

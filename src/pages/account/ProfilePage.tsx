@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { updateSafeProfileFields } from '../../services/profileService';
-import { Lock, Save, CheckCircle } from 'lucide-react';
+import { getPlayerStatsByUid } from '../../services/statsService';
+import type { PlayerCompetitiveStats, CompetitiveGame } from '../../types/competitive';
+import { Lock, Save, CheckCircle, Crosshair } from 'lucide-react';
 
 const AVATAR_COLORS = [
   '#00e5ff', '#e040fb', '#ff4655', '#ffd600',
@@ -24,6 +26,33 @@ export const ProfilePage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [combatStats, setCombatStats] = useState<PlayerCompetitiveStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    let isMounted = true;
+    getPlayerStatsByUid(
+      currentUser.uid,
+      userProfile?.gamingUsername || userProfile?.displayName || 'Player',
+      (userProfile?.preferredGame as CompetitiveGame) || 'Free Fire Max'
+    )
+      .then((stats) => {
+        if (isMounted) {
+          setCombatStats(stats);
+          setStatsLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('Error fetching combat stats:', err);
+        if (isMounted) setStatsLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser, userProfile]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,6 +176,120 @@ export const ProfilePage: React.FC = () => {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Verified Combat Record & Performance Analytics Card */}
+        <div
+          style={{
+            background: 'rgba(0, 229, 255, 0.03)',
+            border: '1px solid rgba(0, 229, 255, 0.15)',
+            borderRadius: '10px',
+            padding: '24px',
+            marginBottom: '32px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Crosshair size={16} color="var(--cyan)" />
+              <h3
+                style={{
+                  fontFamily: 'Rajdhani, sans-serif',
+                  fontSize: '0.8rem',
+                  color: 'var(--cyan)',
+                  letterSpacing: '0.18em',
+                  textTransform: 'uppercase',
+                  fontWeight: 700
+                }}
+              >
+                Verified Combat Record & Match Analytics
+              </h3>
+            </div>
+            <span
+              style={{
+                fontFamily: 'Rajdhani, sans-serif',
+                fontSize: '0.72rem',
+                color: '#4ade80',
+                background: 'rgba(74, 222, 128, 0.1)',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                border: '1px solid rgba(74, 222, 128, 0.2)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em'
+              }}
+            >
+              Anti-Tamper Sync
+            </span>
+          </div>
+
+          {statsLoading ? (
+            <p style={{ color: '#4a6a8a', fontSize: '0.85rem' }}>Synchronizing combat statistics...</p>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                gap: '14px'
+              }}
+            >
+              <div>
+                <span style={{ fontSize: '0.7rem', color: '#4a6a8a', textTransform: 'uppercase' }}>Matches</span>
+                <p style={{ fontFamily: 'Orbitron, monospace', fontSize: '1.1rem', fontWeight: 700, color: '#fff', marginTop: '4px' }}>
+                  {combatStats?.matchesPlayed || 0}
+                </p>
+              </div>
+
+              <div>
+                <span style={{ fontSize: '0.7rem', color: '#4a6a8a', textTransform: 'uppercase' }}>Total Frags</span>
+                <p style={{ fontFamily: 'Orbitron, monospace', fontSize: '1.1rem', fontWeight: 700, color: '#ff4655', marginTop: '4px' }}>
+                  {combatStats?.totalKills || 0}
+                </p>
+              </div>
+
+              <div>
+                <span style={{ fontSize: '0.7rem', color: '#4a6a8a', textTransform: 'uppercase' }}>K/D Ratio</span>
+                <p style={{ fontFamily: 'Orbitron, monospace', fontSize: '1.1rem', fontWeight: 700, color: '#ffd700', marginTop: '4px' }}>
+                  {combatStats?.kdRatio || 0}
+                </p>
+              </div>
+
+              <div>
+                <span style={{ fontSize: '0.7rem', color: '#4a6a8a', textTransform: 'uppercase' }}>Win Rate</span>
+                <p style={{ fontFamily: 'Orbitron, monospace', fontSize: '1.1rem', fontWeight: 700, color: '#4ade80', marginTop: '4px' }}>
+                  {combatStats?.winRate || 0}%
+                </p>
+              </div>
+
+              <div>
+                <span style={{ fontSize: '0.7rem', color: '#4a6a8a', textTransform: 'uppercase' }}>Recent Form</span>
+                <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
+                  {combatStats?.recentForm && combatStats.recentForm.length > 0 ? (
+                    combatStats.recentForm.map((outcome, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '3px',
+                          background: outcome === 'W' ? 'rgba(74, 222, 128, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                          color: outcome === 'W' ? '#4ade80' : '#ef4444',
+                          border: outcome === 'W' ? '1px solid #4ade80' : '1px solid #ef4444',
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          lineHeight: '18px',
+                          textAlign: 'center',
+                          fontFamily: 'Orbitron, monospace'
+                        }}
+                      >
+                        {outcome}
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: '0.75rem', color: '#4a6a8a' }}>No matches yet</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Editable Profile Form */}

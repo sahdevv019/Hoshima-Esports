@@ -61,6 +61,21 @@ export const Navbar: React.FC = () => {
           </Link>
         </li>
         <li>
+          <Link to="/scrims" className={location.pathname.startsWith('/scrims') ? 'active' : ''}>
+            Scrims
+          </Link>
+        </li>
+        <li>
+          <Link to="/tournaments" className={location.pathname.startsWith('/tournaments') ? 'active' : ''}>
+            Tournaments
+          </Link>
+        </li>
+        <li>
+          <Link to="/leaderboards" className={location.pathname === '/leaderboards' ? 'active' : ''}>
+            Leaderboards
+          </Link>
+        </li>
+        <li>
           <Link to="/achievements" className={location.pathname === '/achievements' ? 'active' : ''}>
             Achievements
           </Link>

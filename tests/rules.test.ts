@@ -844,6 +844,654 @@ describe('Firestore Security Rules', () => {
     });
   });
 
+  describe('scrims collection', () => {
+    it('public unauthenticated users can read scrims', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('scrims').doc('scrim1').set({
+          title: 'Daily FF Scrim',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-01T18:00:00Z',
+          registrationDeadline: '2026-11-01T17:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 0,
+          rules: 'No emulators',
+          status: 'registration-open',
+          createdBy: 'ff_capt',
+          creatorName: 'FF Captain',
+          creatorRole: 'captain'
+        });
+      });
+
+      const unauth = testEnv.unauthenticatedContext();
+      const db = unauth.firestore();
+      await assertSucceeds(db.collection('scrims').doc('scrim1').get());
+      await assertSucceeds(db.collection('scrims').get());
+    });
+
+    it('captain can create scrim for assigned squad, but NOT for another game', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const adminDb = context.firestore();
+        await adminDb.collection('users').doc('ff_capt').set({
+          uid: 'ff_capt',
+          displayName: 'FF Captain',
+          gamingUsername: 'FF_CAPT',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+      });
+
+      const capt = testEnv.authenticatedContext('ff_capt');
+      const db = capt.firestore();
+
+      // Scrim for Free Fire Max: SUCCEED
+      await assertSucceeds(
+        db.collection('scrims').doc('scrim_ff').set({
+          title: 'Squad Drill #1',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-02T19:00:00Z',
+          registrationDeadline: '2026-11-02T18:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 0,
+          rules: 'Standard Rules',
+          status: 'registration-open',
+          createdBy: 'ff_capt',
+          creatorName: 'FF Captain',
+          creatorRole: 'captain'
+        })
+      );
+
+      // Scrim for BGMI by FF Captain: FAIL
+      await assertFails(
+        db.collection('scrims').doc('scrim_bgmi').set({
+          title: 'BGMI Practice',
+          game: 'BGMI',
+          squad: 'BGMI',
+          map: 'Erangel',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-02T19:00:00Z',
+          registrationDeadline: '2026-11-02T18:00:00Z',
+          maxParticipants: 16,
+          currentParticipants: 0,
+          rules: 'Standard Rules',
+          status: 'registration-open',
+          createdBy: 'ff_capt',
+          creatorName: 'FF Captain',
+          creatorRole: 'captain'
+        })
+      );
+    });
+
+    it('member cannot create scrims', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const adminDb = context.firestore();
+        await adminDb.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+      });
+
+      const member = testEnv.authenticatedContext('member1');
+      await assertFails(
+        member.firestore().collection('scrims').doc('scrim_m').set({
+          title: 'Rogue Scrim',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-02T19:00:00Z',
+          registrationDeadline: '2026-11-02T18:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 0,
+          rules: 'Standard Rules',
+          status: 'registration-open',
+          createdBy: 'member1',
+          creatorName: 'Member',
+          creatorRole: 'captain'
+        })
+      );
+    });
+
+    it('approved member can update currentParticipants & updatedAt, but not other fields', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('scrims').doc('scrim_slot').set({
+          title: 'Slot Test Scrim',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-02T19:00:00Z',
+          registrationDeadline: '2026-11-02T18:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 0,
+          rules: 'Standard Rules',
+          status: 'registration-open',
+          createdBy: 'ff_capt',
+          creatorName: 'FF Captain',
+          creatorRole: 'captain'
+        });
+      });
+
+      const member = testEnv.authenticatedContext('member1');
+      const db = member.firestore();
+
+      // Updating participant count: SUCCEED
+      await assertSucceeds(
+        db.collection('scrims').doc('scrim_slot').update({
+          currentParticipants: 1
+        })
+      );
+
+      // Attempting to cancel or alter rules: FAIL
+      await assertFails(
+        db.collection('scrims').doc('scrim_slot').update({
+          status: 'cancelled'
+        })
+      );
+    });
+
+    it('captain can delete own scrim, but not another captain scrim', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('ff_capt').set({
+          uid: 'ff_capt',
+          displayName: 'FF Captain',
+          gamingUsername: 'FF_CAPT',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+        await db.collection('users').doc('bgmi_capt').set({
+          uid: 'bgmi_capt',
+          displayName: 'BGMI Captain',
+          gamingUsername: 'BGMI_CAPT',
+          preferredGame: 'BGMI',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'BGMI'
+        });
+        await db.collection('scrims').doc('ff_drill').set({
+          title: 'FF Drill',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Squad',
+          scheduledTime: '2026-11-02T19:00:00Z',
+          registrationDeadline: '2026-11-02T18:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 0,
+          rules: 'Rules',
+          status: 'registration-open',
+          createdBy: 'ff_capt',
+          creatorName: 'FF Capt',
+          creatorRole: 'captain'
+        });
+        await db.collection('scrims').doc('bgmi_drill').set({
+          title: 'BGMI Drill',
+          game: 'BGMI',
+          squad: 'BGMI',
+          map: 'Erangel',
+          format: 'Squad',
+          scheduledTime: '2026-11-02T19:00:00Z',
+          registrationDeadline: '2026-11-02T18:00:00Z',
+          maxParticipants: 16,
+          currentParticipants: 0,
+          rules: 'Rules',
+          status: 'registration-open',
+          createdBy: 'bgmi_capt',
+          creatorName: 'BGMI Capt',
+          creatorRole: 'captain'
+        });
+      });
+
+      const ffCapt = testEnv.authenticatedContext('ff_capt');
+      const db = ffCapt.firestore();
+      // Delete own scrim: SUCCEED
+      await assertSucceeds(db.collection('scrims').doc('ff_drill').delete());
+      // Delete BGMI scrim: FAIL
+      await assertFails(db.collection('scrims').doc('bgmi_drill').delete());
+    });
+  });
+
+  describe('scrim_registrations collection', () => {
+    it('approved member can register for scrim with deterministic ID and status registered', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const adminDb = context.firestore();
+        await adminDb.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+      });
+
+      const member = testEnv.authenticatedContext('member1');
+      const db = member.firestore();
+
+      await assertSucceeds(
+        db.collection('scrim_registrations').doc('scrim1_member1').set({
+          id: 'scrim1_member1',
+          scrimId: 'scrim1',
+          game: 'Free Fire Max',
+          userId: 'member1',
+          userName: 'MEMBER1',
+          teamName: 'Team Phoenix',
+          contact: 'Discord#1234',
+          status: 'registered'
+        })
+      );
+
+      // Mismatched document ID: FAIL
+      await assertFails(
+        db.collection('scrim_registrations').doc('wrong_id').set({
+          id: 'wrong_id',
+          scrimId: 'scrim1',
+          game: 'Free Fire Max',
+          userId: 'member1',
+          userName: 'MEMBER1',
+          teamName: 'Team Phoenix',
+          contact: 'Discord#1234',
+          status: 'registered'
+        })
+      );
+
+      // Registering for another user: FAIL
+      await assertFails(
+        db.collection('scrim_registrations').doc('scrim1_other').set({
+          id: 'scrim1_other',
+          scrimId: 'scrim1',
+          game: 'Free Fire Max',
+          userId: 'other',
+          userName: 'Other',
+          teamName: 'Team Phoenix',
+          contact: 'Discord#1234',
+          status: 'registered'
+        })
+      );
+    });
+
+    it('pending user cannot register for scrims', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const adminDb = context.firestore();
+        await adminDb.collection('users').doc('pending1').set({
+          uid: 'pending1',
+          displayName: 'Pending One',
+          gamingUsername: 'PENDING1',
+          preferredGame: 'Free Fire Max',
+          role: 'pending',
+          status: 'pending'
+        });
+      });
+
+      const pending = testEnv.authenticatedContext('pending1');
+      await assertFails(
+        pending.firestore().collection('scrim_registrations').doc('scrim1_pending1').set({
+          id: 'scrim1_pending1',
+          scrimId: 'scrim1',
+          game: 'Free Fire Max',
+          userId: 'pending1',
+          userName: 'PENDING1',
+          teamName: 'Team Pending',
+          contact: 'Discord#9999',
+          status: 'registered'
+        })
+      );
+    });
+
+    it('registrant can withdraw registration, but cannot self-confirm or change team details', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('scrim_registrations').doc('scrim1_member1').set({
+          id: 'scrim1_member1',
+          scrimId: 'scrim1',
+          game: 'Free Fire Max',
+          userId: 'member1',
+          userName: 'MEMBER1',
+          teamName: 'Team Phoenix',
+          contact: 'Discord#1234',
+          status: 'registered'
+        });
+      });
+
+      const member = testEnv.authenticatedContext('member1');
+      const db = member.firestore();
+
+      // Withdraw: SUCCEED
+      await assertSucceeds(
+        db.collection('scrim_registrations').doc('scrim1_member1').update({
+          status: 'withdrawn'
+        })
+      );
+
+      // Self-confirm: FAIL
+      await assertFails(
+        db.collection('scrim_registrations').doc('scrim1_member1').update({
+          status: 'confirmed'
+        })
+      );
+    });
+  });
+
+  describe('tournaments collection', () => {
+    it('public can view tournaments, but only admin can create/update', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('admin1').set({
+          uid: 'admin1',
+          displayName: 'Admin',
+          gamingUsername: 'ADMIN',
+          preferredGame: 'Free Fire Max',
+          role: 'admin',
+          status: 'approved'
+        });
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member',
+          gamingUsername: 'MEMBER',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+      });
+
+      const unauth = testEnv.unauthenticatedContext();
+      await assertSucceeds(unauth.firestore().collection('tournaments').get());
+
+      const member = testEnv.authenticatedContext('member1');
+      await assertFails(
+        member.firestore().collection('tournaments').doc('t1').set({
+          name: 'Hoshima Major Season 1',
+          game: 'Free Fire Max',
+          description: 'Grand seasonal championship',
+          startDate: '2026-12-01T10:00:00Z',
+          endDate: '2026-12-05T20:00:00Z',
+          registrationDeadline: '2026-11-28T23:59:59Z',
+          maxTeams: 16,
+          currentTeams: 0,
+          format: 'single-elimination',
+          rules: 'Official Rulebook 2026',
+          prizePool: '$5,000 USD',
+          status: 'upcoming',
+          createdBy: 'member1'
+        })
+      );
+
+      const admin = testEnv.authenticatedContext('admin1');
+      await assertSucceeds(
+        admin.firestore().collection('tournaments').doc('t1').set({
+          name: 'Hoshima Major Season 1',
+          game: 'Free Fire Max',
+          description: 'Grand seasonal championship',
+          startDate: '2026-12-01T10:00:00Z',
+          endDate: '2026-12-05T20:00:00Z',
+          registrationDeadline: '2026-11-28T23:59:59Z',
+          maxTeams: 16,
+          currentTeams: 0,
+          format: 'single-elimination',
+          rules: 'Official Rulebook 2026',
+          prizePool: '$5,000 USD',
+          status: 'upcoming',
+          createdBy: 'admin1'
+        })
+      );
+    });
+  });
+
+  describe('tournament_registrations collection', () => {
+    it('division captain can register team, but cannot self-approve or seed', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('admin1').set({
+          uid: 'admin1',
+          displayName: 'Admin',
+          gamingUsername: 'ADMIN',
+          preferredGame: 'Free Fire Max',
+          role: 'admin',
+          status: 'approved'
+        });
+        await db.collection('users').doc('ff_capt').set({
+          uid: 'ff_capt',
+          displayName: 'FF Captain',
+          gamingUsername: 'FF_CAPT',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+      });
+
+      const capt = testEnv.authenticatedContext('ff_capt');
+      const db = capt.firestore();
+
+      // Valid registration: SUCCEED
+      await assertSucceeds(
+        db.collection('tournament_registrations').doc('tourney1_ff_capt').set({
+          id: 'tourney1_ff_capt',
+          tournamentId: 'tourney1',
+          game: 'Free Fire Max',
+          captainUid: 'ff_capt',
+          captainName: 'FF Captain',
+          teamName: 'Red Phoenix Elite',
+          contact: 'Discord#5555',
+          roster: [{ name: 'Player 1', role: 'IGL' }, { name: 'Player 2', role: 'Sniper' }],
+          status: 'registered'
+        })
+      );
+
+      // Attempting to self-approve: FAIL
+      await assertFails(
+        db.collection('tournament_registrations').doc('tourney2_ff_capt').set({
+          id: 'tourney2_ff_capt',
+          tournamentId: 'tourney2',
+          game: 'Free Fire Max',
+          captainUid: 'ff_capt',
+          captainName: 'FF Captain',
+          teamName: 'Red Phoenix Elite',
+          contact: 'Discord#5555',
+          roster: [{ name: 'Player 1', role: 'IGL' }],
+          status: 'approved'
+        })
+      );
+    });
+  });
+
+  describe('matches collection', () => {
+    it('captain can create scrim match, but cannot create tournament match', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('admin1').set({
+          uid: 'admin1',
+          displayName: 'Admin',
+          gamingUsername: 'ADMIN',
+          preferredGame: 'Free Fire Max',
+          role: 'admin',
+          status: 'approved'
+        });
+        await db.collection('users').doc('ff_capt').set({
+          uid: 'ff_capt',
+          displayName: 'FF Captain',
+          gamingUsername: 'FF_CAPT',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+      });
+
+      const capt = testEnv.authenticatedContext('ff_capt');
+      const db = capt.firestore();
+
+      // Scrim match: SUCCEED
+      await assertSucceeds(
+        db.collection('matches').doc('match_scrim').set({
+          competitionType: 'scrim',
+          competitionId: 'scrim1',
+          game: 'Free Fire Max',
+          teamA: { id: 'team1', name: 'Alpha' },
+          teamB: { id: 'team2', name: 'Beta' },
+          status: 'scheduled',
+          isConfirmed: false
+        })
+      );
+
+      // Tournament match by captain: FAIL
+      await assertFails(
+        db.collection('matches').doc('match_tourney').set({
+          competitionType: 'tournament',
+          competitionId: 'tourney1',
+          game: 'Free Fire Max',
+          teamA: { id: 'team1', name: 'Alpha' },
+          teamB: { id: 'team2', name: 'Beta' },
+          status: 'scheduled',
+          isConfirmed: false
+        })
+      );
+    });
+
+    it('captain CANNOT self-confirm match scores', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('admin1').set({
+          uid: 'admin1',
+          displayName: 'Admin',
+          gamingUsername: 'ADMIN',
+          preferredGame: 'Free Fire Max',
+          role: 'admin',
+          status: 'approved'
+        });
+        await db.collection('users').doc('ff_capt').set({
+          uid: 'ff_capt',
+          displayName: 'FF Captain',
+          gamingUsername: 'FF_CAPT',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+        await db.collection('matches').doc('match_scrim').set({
+          competitionType: 'scrim',
+          competitionId: 'scrim1',
+          game: 'Free Fire Max',
+          teamA: { id: 'team1', name: 'Alpha' },
+          teamB: { id: 'team2', name: 'Beta' },
+          status: 'in-progress',
+          proposedBy: 'ff_capt',
+          isConfirmed: false
+        });
+      });
+
+      const capt = testEnv.authenticatedContext('ff_capt');
+      const db = capt.firestore();
+
+      // Captain attempts to confirm match: FAIL
+      await assertFails(
+        db.collection('matches').doc('match_scrim').update({
+          isConfirmed: true,
+          confirmedBy: 'ff_capt'
+        })
+      );
+    });
+  });
+
+  describe('player_stats collection', () => {
+    it('public can view player stats, but only admin can create/modify stats', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('admin1').set({
+          uid: 'admin1',
+          displayName: 'Admin',
+          gamingUsername: 'ADMIN',
+          preferredGame: 'Free Fire Max',
+          role: 'admin',
+          status: 'approved'
+        });
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member',
+          gamingUsername: 'MEMBER',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+      });
+
+      const unauth = testEnv.unauthenticatedContext();
+      await assertSucceeds(unauth.firestore().collection('player_stats').get());
+
+      const member = testEnv.authenticatedContext('member1');
+      await assertFails(
+        member.firestore().collection('player_stats').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member',
+          gamingUsername: 'MEMBER',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          matchesPlayed: 10,
+          wins: 8,
+          losses: 2,
+          winRate: 80,
+          totalKills: 55,
+          totalDeaths: 12,
+          kdRatio: 4.58,
+          tournamentsWon: 1,
+          tournamentAppearances: 2
+        })
+      );
+
+      const admin = testEnv.authenticatedContext('admin1');
+      await assertSucceeds(
+        admin.firestore().collection('player_stats').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member',
+          gamingUsername: 'MEMBER',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          matchesPlayed: 10,
+          wins: 8,
+          losses: 2,
+          winRate: 80,
+          totalKills: 55,
+          totalDeaths: 12,
+          kdRatio: 4.58,
+          tournamentsWon: 1,
+          tournamentAppearances: 2
+        })
+      );
+    });
+  });
+
   describe('default deny all', () => {
     it('unspecified collections are completely denied', async () => {
       const admin = testEnv.authenticatedContext('admin');
