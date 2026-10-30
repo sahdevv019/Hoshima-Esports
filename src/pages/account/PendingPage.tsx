@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { subscribeToApplication } from '../../services/applicationService';
 import type { RegistrationApplication } from '../../types/auth';
-import { Clock, LogOut, Edit3 } from 'lucide-react';
+import { Clock, LogOut, Edit3, AlertCircle, FileText, XCircle } from 'lucide-react';
 
 export const PendingPage: React.FC = () => {
   const { currentUser, userProfile, role, logout } = useAuth();
@@ -34,12 +34,16 @@ export const PendingPage: React.FC = () => {
     navigate('/');
   };
 
+  const isRejected = application?.status === 'rejected';
+  const isPendingReview = application?.status === 'pending';
+  const hasNoApplication = !loadingApp && !application;
+
   return (
     <div
       style={{
         paddingTop: '100px',
         minHeight: '100vh',
-        maxWidth: '800px',
+        maxWidth: '820px',
         margin: '0 auto',
         padding: '100px 20px 80px'
       }}
@@ -47,33 +51,77 @@ export const PendingPage: React.FC = () => {
       <div
         style={{
           background: 'var(--dark2)',
-          border: '1px solid rgba(250, 204, 21, 0.3)',
+          border: `1px solid ${isRejected ? 'rgba(255, 70, 85, 0.4)' : hasNoApplication ? 'rgba(0, 229, 255, 0.35)' : 'rgba(250, 204, 21, 0.3)'}`,
           borderRadius: '16px',
           padding: '40px',
-          boxShadow: '0 24px 80px rgba(0,0,0,.7), 0 0 30px rgba(250, 204, 21, 0.1)',
+          boxShadow: `0 24px 80px rgba(0,0,0,.7), 0 0 30px ${isRejected ? 'rgba(255, 70, 85, 0.12)' : hasNoApplication ? 'rgba(0, 229, 255, 0.1)' : 'rgba(250, 204, 21, 0.1)'}`,
           position: 'relative',
           overflow: 'hidden'
         }}
       >
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: 'rgba(250, 204, 21, 0.12)',
-            border: '1px solid rgba(250, 204, 21, 0.35)',
-            borderRadius: '100px',
-            padding: '6px 16px',
-            color: '#facc15',
-            fontFamily: 'Rajdhani, sans-serif',
-            fontSize: '0.8rem',
-            fontWeight: 700,
-            letterSpacing: '0.15em',
-            textTransform: 'uppercase',
-            marginBottom: '24px'
-          }}
-        >
-          <Clock size={16} /> Awaiting Administrator Authorization
+        {/* Status Badge Header */}
+        <div style={{ marginBottom: '24px' }}>
+          {hasNoApplication ? (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(0, 229, 255, 0.12)',
+                border: '1px solid rgba(0, 229, 255, 0.35)',
+                borderRadius: '100px',
+                padding: '6px 16px',
+                color: 'var(--cyan)',
+                fontFamily: 'Rajdhani, sans-serif',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase'
+              }}
+            >
+              <FileText size={16} /> Action Required: Submit Recruitment Dossier
+            </div>
+          ) : isRejected ? (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(255, 70, 85, 0.12)',
+                border: '1px solid rgba(255, 70, 85, 0.35)',
+                borderRadius: '100px',
+                padding: '6px 16px',
+                color: '#ff6b7a',
+                fontFamily: 'Rajdhani, sans-serif',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase'
+              }}
+            >
+              <XCircle size={16} /> Application Declined
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(250, 204, 21, 0.12)',
+                border: '1px solid rgba(250, 204, 21, 0.35)',
+                borderRadius: '100px',
+                padding: '6px 16px',
+                color: '#facc15',
+                fontFamily: 'Rajdhani, sans-serif',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase'
+              }}
+            >
+              <Clock size={16} /> Awaiting Administrator Authorization
+            </div>
+          )}
         </div>
 
         <h1
@@ -87,54 +135,131 @@ export const PendingPage: React.FC = () => {
         >
           Welcome, {userProfile?.displayName || currentUser?.displayName || 'Operative'}
         </h1>
-        <p style={{ color: '#7a9ab5', fontSize: '1rem', lineHeight: 1.6, marginBottom: '32px' }}>
-          Your Google account has been authenticated. However, because Hoshima Esports maintains strict competitive
-          standards, all accounts require manual review and verification by an organization administrator before squad
-          access is granted.
+
+        <p style={{ color: '#7a9ab5', fontSize: '1rem', lineHeight: 1.6, marginBottom: '28px' }}>
+          {hasNoApplication
+            ? 'Your Google account is signed in with a Pending profile, but you have not yet completed a recruitment application. To trial out for Hoshima rosters and access squad terminals, submit your competitive dossier below.'
+            : isRejected
+            ? 'Your competitive recruitment application has been reviewed and declined by Hoshima organization leadership. Your account remains restricted from private squad resources.'
+            : 'Your Google identity is verified. Hoshima Esports maintains strict competitive standards; all applications are individually reviewed by team scouting and administrators.'}
         </p>
 
-        {/* Status Box */}
-        <div
-          style={{
-            background: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: '10px',
-            padding: '24px',
-            marginBottom: '32px'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-            <h3
+        {/* If No Application Submitted: Clear Call-To-Action Banner */}
+        {hasNoApplication && (
+          <div
+            style={{
+              background: 'rgba(0, 229, 255, 0.05)',
+              border: '1px solid rgba(0, 229, 255, 0.25)',
+              borderRadius: '12px',
+              padding: '28px',
+              marginBottom: '32px',
+              textAlign: 'center'
+            }}
+          >
+            <div
               style={{
-                fontFamily: 'Rajdhani, sans-serif',
-                fontSize: '0.85rem',
-                color: '#4a6a8a',
-                letterSpacing: '0.2em',
-                textTransform: 'uppercase'
-              }}
-            >
-              Application Dossier
-            </h3>
-            <Link
-              to="/recruitment"
-              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                background: 'rgba(0, 229, 255, 0.1)',
+                color: 'var(--cyan)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                color: 'var(--cyan)',
-                fontSize: '0.85rem',
-                textDecoration: 'none',
-                fontFamily: 'Rajdhani, sans-serif',
-                fontWeight: 600
+                justifyContent: 'center',
+                margin: '0 auto 16px'
               }}
             >
-              <Edit3 size={14} /> Update Application
+              <FileText size={24} />
+            </div>
+            <h3 style={{ fontFamily: 'Orbitron, monospace', fontSize: '1.2rem', color: '#fff', marginBottom: '8px' }}>
+              RECRUITMENT APPLICATION REQUIRED
+            </h3>
+            <p style={{ color: '#8ca0b8', fontSize: '0.92rem', maxWidth: '520px', margin: '0 auto 24px', lineHeight: 1.6 }}>
+              Select your game division (Free Fire Max, BGMI, Valorant, or Mobile Legends), provide your in-game UID, and describe your competitive experience.
+            </p>
+            <Link
+              to="/recruitment"
+              className="btn-primary"
+              style={{ padding: '12px 28px', fontSize: '0.95rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+            >
+              Complete Recruitment Application Now →
             </Link>
           </div>
+        )}
 
-          {loadingApp ? (
-            <p style={{ color: '#4a6a8a', fontSize: '0.9rem' }}>Retrieving application details...</p>
-          ) : application ? (
+        {/* If Rejected: Rejection Reason & Appeal Information */}
+        {isRejected && (
+          <div
+            style={{
+              background: 'rgba(255, 70, 85, 0.08)',
+              border: '1px solid rgba(255, 70, 85, 0.3)',
+              borderRadius: '10px',
+              padding: '24px',
+              marginBottom: '32px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <AlertCircle size={20} color="#ff6b7a" />
+              <h3 style={{ fontFamily: 'Orbitron, monospace', fontSize: '1rem', color: '#fff' }}>
+                APPLICATION STATUS: DECLINED
+              </h3>
+            </div>
+            <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', padding: '14px', borderRadius: '6px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '0.75rem', color: '#8ca0b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Reviewer Decision Notes
+              </span>
+              <p style={{ color: '#ff8a98', fontSize: '0.95rem', marginTop: '4px', fontWeight: 600 }}>
+                "{application.rejectionReason || 'Application does not meet current competitive criteria.'}"
+              </p>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: '#8ca0b8', lineHeight: 1.6 }}>
+              <strong>How to proceed:</strong> In accordance with organization security policies, self-serve client resubmission is locked after review. If you have achieved higher tier rankings or tournament placements and would like an administrator to re-evaluate your record, please contact Hoshima management via our official community Discord.
+            </p>
+          </div>
+        )}
+
+        {/* If Application Exists: Application Dossier Details */}
+        {application && (
+          <div
+            style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '10px',
+              padding: '24px',
+              marginBottom: '32px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+              <h3
+                style={{
+                  fontFamily: 'Rajdhani, sans-serif',
+                  fontSize: '0.85rem',
+                  color: '#4a6a8a',
+                  letterSpacing: '0.2em',
+                  textTransform: 'uppercase'
+                }}
+              >
+                Submitted Dossier Details
+              </h3>
+              {isPendingReview && (
+                <Link
+                  to="/recruitment"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    color: 'var(--cyan)',
+                    fontSize: '0.85rem',
+                    textDecoration: 'none',
+                    fontFamily: 'Rajdhani, sans-serif',
+                    fontWeight: 600
+                  }}
+                >
+                  <Edit3 size={14} /> Update Pending Details
+                </Link>
+              )}
+            </div>
+
             <div
               style={{
                 display: 'grid',
@@ -173,46 +298,41 @@ export const PendingPage: React.FC = () => {
                 </p>
               </div>
             </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '16px 0' }}>
-              <p style={{ color: '#8ca0b8', marginBottom: '14px', fontSize: '0.95rem' }}>
-                You have not yet submitted your recruitment dossier.
-              </p>
-              <Link to="/recruitment" className="btn-primary" style={{ padding: '8px 20px', fontSize: '0.85rem' }}>
-                Complete Recruitment Dossier
-              </Link>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Live Listener Pulse */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '14px 20px',
-            borderRadius: '8px',
-            backgroundColor: 'rgba(0, 229, 255, 0.04)',
-            border: '1px solid rgba(0, 229, 255, 0.15)',
-            marginBottom: '32px'
-          }}
-        >
+        {/* Live Listener Pulse (shown when pending review) */}
+        {isPendingReview && (
           <div
             style={{
-              width: '10px',
-              height: '10px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--cyan)',
-              boxShadow: '0 0 10px var(--cyan)'
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '14px 20px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(0, 229, 255, 0.04)',
+              border: '1px solid rgba(0, 229, 255, 0.15)',
+              marginBottom: '32px'
             }}
-          />
-          <span style={{ fontSize: '0.85rem', color: '#8ca0b8' }}>
-            Live channel active. You do not need to refresh; this terminal will automatically open when approved.
-          </span>
-        </div>
+          >
+            <div
+              style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--cyan)',
+                boxShadow: '0 0 10px var(--cyan)',
+                animation: 'pulse 2s infinite'
+              }}
+            />
+            <span style={{ fontSize: '0.85rem', color: '#8ca0b8' }}>
+              Live channel active. You do not need to refresh; this terminal will automatically open when approved.
+            </span>
+            <style>{`@keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }`}</style>
+          </div>
+        )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <button
             onClick={handleLogout}
             style={{

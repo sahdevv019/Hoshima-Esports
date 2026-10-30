@@ -6,13 +6,15 @@ import { subscribeToRoster } from '../../services/rosterService';
 import { subscribeToArcadeGames, addArcadeGame } from '../../services/arcadeService';
 import type { RosterPlayer, ArcadeGame } from '../../types/roster';
 import { useAuth } from '../../context/AuthContext';
-import { Gamepad2, ArrowRight, X, Play } from 'lucide-react';
+import { Gamepad2, ArrowRight, X, Play, Lock, ShieldAlert } from 'lucide-react';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, role, userProfile } = useAuth();
   const [players, setPlayers] = useState<RosterPlayer[]>([]);
   const [arcadeGames, setArcadeGames] = useState<ArcadeGame[]>([]);
+
+  const isApprovedMember = role === 'admin' || role === 'captain' || role === 'member';
 
   // Arcade theater state
   const [playingGame, setPlayingGame] = useState<{ title: string; url: string } | null>(null);
@@ -38,13 +40,29 @@ export const HomePage: React.FC = () => {
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setUploadError('');
+
+    if (!currentUser) {
+      setUploadError('Authentication Required: Please sign in with an approved operative account.');
+      return;
+    }
+
+    if (!isApprovedMember) {
+      setUploadError('Clearance Required: Operatives under pending recruitment review cannot publish arcade games until approved.');
+      return;
+    }
+
+    if (!uploadUrl.startsWith('http://') && !uploadUrl.startsWith('https://')) {
+      setUploadError('Invalid URL: Web game URL must start with http:// or https://');
+      return;
+    }
+
     try {
       await addArcadeGame({
-        title: uploadTitle,
-        genre: uploadGenre || 'Arcade',
-        desc: uploadDesc,
-        url: uploadUrl,
-        author: uploadAuthor || currentUser?.displayName || 'Anonymous'
+        title: uploadTitle.trim(),
+        genre: uploadGenre.trim() || 'Arcade',
+        desc: uploadDesc.trim(),
+        url: uploadUrl.trim(),
+        author: uploadAuthor.trim() || userProfile?.gamingUsername || currentUser?.displayName || 'Anonymous'
       });
       setIsUploadOpen(false);
       setUploadTitle('');
@@ -53,7 +71,12 @@ export const HomePage: React.FC = () => {
       setUploadUrl('');
       setUploadAuthor('');
     } catch (err: any) {
-      setUploadError(err.message || 'Failed to upload arcade game.');
+      console.error('[Arcade] Upload error:', err);
+      if (err?.code === 'permission-denied') {
+        setUploadError('Firestore Permission Denied: Only approved Hoshima members and admins can publish arcade games.');
+      } else {
+        setUploadError(err.message || 'Failed to upload arcade game.');
+      }
     }
   };
 
@@ -804,145 +827,260 @@ export const HomePage: React.FC = () => {
               </div>
             )}
 
-            <form onSubmit={handleUploadSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label
+            {!currentUser ? (
+              <div style={{ textAlign: 'center', padding: '24px 12px' }}>
+                <div
                   style={{
-                    display: 'block',
-                    fontFamily: 'Rajdhani, sans-serif',
-                    fontSize: '0.75rem',
-                    color: '#4a6a8a',
-                    marginBottom: '6px',
-                    textTransform: 'uppercase'
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '50%',
+                    background: 'rgba(0, 229, 255, 0.08)',
+                    border: '1px solid rgba(0, 229, 255, 0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 16px'
                   }}
                 >
-                  Game Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={uploadTitle}
-                  onChange={(e) => setUploadTitle(e.target.value)}
-                  placeholder="e.g. Laser Quest"
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255,255,255,.05)',
-                    border: '1px solid rgba(255,255,255,.1)',
-                    borderRadius: '6px',
-                    padding: '10px 14px',
-                    color: '#fff',
-                    outline: 'none'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontFamily: 'Rajdhani, sans-serif',
-                    fontSize: '0.75rem',
-                    color: '#4a6a8a',
-                    marginBottom: '6px',
-                    textTransform: 'uppercase'
-                  }}
-                >
-                  Genre
-                </label>
-                <input
-                  type="text"
-                  value={uploadGenre}
-                  onChange={(e) => setUploadGenre(e.target.value)}
-                  placeholder="e.g. Platformer / Shooter"
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255,255,255,.05)',
-                    border: '1px solid rgba(255,255,255,.1)',
-                    borderRadius: '6px',
-                    padding: '10px 14px',
-                    color: '#fff',
-                    outline: 'none'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontFamily: 'Rajdhani, sans-serif',
-                    fontSize: '0.75rem',
-                    color: '#4a6a8a',
-                    marginBottom: '6px',
-                    textTransform: 'uppercase'
-                  }}
-                >
-                  Description *
-                </label>
-                <textarea
-                  required
-                  rows={2}
-                  value={uploadDesc}
-                  onChange={(e) => setUploadDesc(e.target.value)}
-                  placeholder="Brief synopsis of gameplay"
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255,255,255,.05)',
-                    border: '1px solid rgba(255,255,255,.1)',
-                    borderRadius: '6px',
-                    padding: '10px 14px',
-                    color: '#fff',
-                    outline: 'none',
-                    resize: 'none'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontFamily: 'Rajdhani, sans-serif',
-                    fontSize: '0.75rem',
-                    color: '#4a6a8a',
-                    marginBottom: '6px',
-                    textTransform: 'uppercase'
-                  }}
-                >
-                  Web Game URL *
-                </label>
-                <input
-                  type="url"
-                  required
-                  value={uploadUrl}
-                  onChange={(e) => setUploadUrl(e.target.value)}
-                  placeholder="https://..."
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255,255,255,.05)',
-                    border: '1px solid rgba(255,255,255,.1)',
-                    borderRadius: '6px',
-                    padding: '10px 14px',
-                    color: '#fff',
-                    outline: 'none'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '14px', justifyContent: 'flex-end' }}>
+                  <Lock size={22} color="var(--cyan)" />
+                </div>
+                <h4 style={{ fontFamily: 'Orbitron, monospace', fontSize: '1.05rem', color: '#fff', marginBottom: '8px' }}>
+                  Authentication Required
+                </h4>
+                <p style={{ color: '#7a9ab5', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '20px' }}>
+                  Only verified Hoshima operatives can publish community web games to the arcade. Sign in to continue.
+                </p>
                 <button
                   type="button"
-                  onClick={() => setIsUploadOpen(false)}
-                  className="btn-outline"
-                  style={{ padding: '10px 20px', fontSize: '0.9rem' }}
+                  onClick={() => {
+                    setIsUploadOpen(false);
+                    navigate('/login');
+                  }}
+                  className="btn-primary"
+                  style={{ padding: '8px 24px', fontSize: '0.85rem' }}
                 >
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary" style={{ padding: '10px 24px', fontSize: '0.9rem' }}>
-                  Upload
+                  Sign In with Google
                 </button>
               </div>
-            </form>
+            ) : !isApprovedMember ? (
+              <div style={{ textAlign: 'center', padding: '24px 12px' }}>
+                <div
+                  style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '50%',
+                    background: 'rgba(234, 179, 8, 0.08)',
+                    border: '1px solid rgba(234, 179, 8, 0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 16px'
+                  }}
+                >
+                  <ShieldAlert size={22} color="#facc15" />
+                </div>
+                <h4 style={{ fontFamily: 'Orbitron, monospace', fontSize: '1.05rem', color: '#fff', marginBottom: '8px' }}>
+                  Clearance Required
+                </h4>
+                <p style={{ color: '#7a9ab5', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '20px' }}>
+                  Your operative account is currently awaiting administrator review. Arcade game submission unlocks once your membership is approved.
+                </p>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUploadOpen(false);
+                      navigate('/recruitment');
+                    }}
+                    className="btn-primary"
+                    style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+                  >
+                    Dossier Application
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUploadOpen(false);
+                      navigate('/pending');
+                    }}
+                    className="btn-outline"
+                    style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+                  >
+                    Check Status
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleUploadSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontFamily: 'Rajdhani, sans-serif',
+                      fontSize: '0.75rem',
+                      color: '#4a6a8a',
+                      marginBottom: '6px',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    Game Title *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={uploadTitle}
+                    onChange={(e) => setUploadTitle(e.target.value)}
+                    placeholder="e.g. Laser Quest"
+                    style={{
+                      width: '100%',
+                      background: 'rgba(255,255,255,.05)',
+                      border: '1px solid rgba(255,255,255,.1)',
+                      borderRadius: '6px',
+                      padding: '10px 14px',
+                      color: '#fff',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontFamily: 'Rajdhani, sans-serif',
+                      fontSize: '0.75rem',
+                      color: '#4a6a8a',
+                      marginBottom: '6px',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    Genre
+                  </label>
+                  <input
+                    type="text"
+                    value={uploadGenre}
+                    onChange={(e) => setUploadGenre(e.target.value)}
+                    placeholder="e.g. Platformer / Shooter"
+                    style={{
+                      width: '100%',
+                      background: 'rgba(255,255,255,.05)',
+                      border: '1px solid rgba(255,255,255,.1)',
+                      borderRadius: '6px',
+                      padding: '10px 14px',
+                      color: '#fff',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontFamily: 'Rajdhani, sans-serif',
+                      fontSize: '0.75rem',
+                      color: '#4a6a8a',
+                      marginBottom: '6px',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    Author / Credit
+                  </label>
+                  <input
+                    type="text"
+                    value={uploadAuthor}
+                    onChange={(e) => setUploadAuthor(e.target.value)}
+                    placeholder={userProfile?.gamingUsername || currentUser?.displayName || 'Your Callsign'}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(255,255,255,.05)',
+                      border: '1px solid rgba(255,255,255,.1)',
+                      borderRadius: '6px',
+                      padding: '10px 14px',
+                      color: '#fff',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontFamily: 'Rajdhani, sans-serif',
+                      fontSize: '0.75rem',
+                      color: '#4a6a8a',
+                      marginBottom: '6px',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    Description *
+                  </label>
+                  <textarea
+                    required
+                    rows={2}
+                    value={uploadDesc}
+                    onChange={(e) => setUploadDesc(e.target.value)}
+                    placeholder="Brief synopsis of gameplay"
+                    style={{
+                      width: '100%',
+                      background: 'rgba(255,255,255,.05)',
+                      border: '1px solid rgba(255,255,255,.1)',
+                      borderRadius: '6px',
+                      padding: '10px 14px',
+                      color: '#fff',
+                      outline: 'none',
+                      resize: 'none'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontFamily: 'Rajdhani, sans-serif',
+                      fontSize: '0.75rem',
+                      color: '#4a6a8a',
+                      marginBottom: '6px',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    Web Game URL * (https://...)
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={uploadUrl}
+                    onChange={(e) => setUploadUrl(e.target.value)}
+                    placeholder="https://..."
+                    style={{
+                      width: '100%',
+                      background: 'rgba(255,255,255,.05)',
+                      border: '1px solid rgba(255,255,255,.1)',
+                      borderRadius: '6px',
+                      padding: '10px 14px',
+                      color: '#fff',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '14px', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsUploadOpen(false)}
+                    className="btn-outline"
+                    style={{ padding: '10px 20px', fontSize: '0.9rem' }}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn-primary" style={{ padding: '10px 24px', fontSize: '0.9rem' }}>
+                    Upload Game
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

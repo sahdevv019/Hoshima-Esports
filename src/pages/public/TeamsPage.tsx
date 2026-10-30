@@ -2,14 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { subscribeToRoster, addRosterPlayer, deleteRosterPlayer } from '../../services/rosterService';
 import type { RosterPlayer } from '../../types/roster';
 import { useAuth } from '../../context/AuthContext';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, X, ShieldAlert } from 'lucide-react';
 
 const GAMES = ['All', 'Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'];
+const SQUADS_OPTIONS = ['Free Fire Max', 'BGMI', 'Valorant', 'Mobile Legends'];
 
 export const TeamsPage: React.FC = () => {
-  const { role } = useAuth();
+  const { role, userProfile } = useAuth();
   const [players, setPlayers] = useState<RosterPlayer[]>([]);
   const [selectedGame, setSelectedGame] = useState<string>('All');
+
+  const isAdmin = role === 'admin';
+  const isCaptain = role === 'captain';
+  const isAdminOrCaptain = isAdmin || isCaptain;
+  const captainSquad = userProfile?.assignedSquad || userProfile?.preferredGame || 'Free Fire Max';
 
   // Add modal state
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -19,42 +25,105 @@ export const TeamsPage: React.FC = () => {
   const [game, setGame] = useState('Free Fire Max');
   const [uid, setUid] = useState('');
   const [color] = useState('#00e5ff');
+  const [submitting, setSubmitting] = useState(false);
 
-  const isAdminOrCaptain = role === 'admin' || role === 'captain';
+  // Status feedback toast / alert
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     const unsub = subscribeToRoster(setPlayers);
     return () => unsub();
   }, []);
 
+  const openAddModal = () => {
+    setFeedback(null);
+    if (isCaptain) {
+      setGame(captainSquad);
+    } else {
+      setGame('Free Fire Max');
+    }
+    setIsAddOpen(true);
+  };
+
   const handleAddPlayer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+
+    // Enforce captain squad scope on client side
+    const targetGame = isCaptain ? captainSquad : game;
+
+    setSubmitting(true);
+    setFeedback(null);
+
     try {
       await addRosterPlayer({
         name: name.trim().toUpperCase(),
         tag: tag.trim() || 'Player',
         role: playerRole.trim() || 'Starter',
-        game,
+        game: targetGame,
         uid: uid.trim() || 'N/A',
-        color
+        color: isCaptain ? '#a855f7' : color
+      });
+
+      setFeedback({
+        type: 'success',
+        message: `Operative "${name.trim().toUpperCase()}" successfully enrolled into ${targetGame}.`
       });
       setIsAddOpen(false);
       setName('');
       setTag('');
       setPlayerRole('');
       setUid('');
-    } catch (err) {
-      console.error('Failed to add player:', err);
+    } catch (err: any) {
+      console.error('[TeamsPage] Failed to add player:', err);
+      if (err?.code === 'permission-denied') {
+        setFeedback({
+          type: 'error',
+          message: `Firestore Security Scope Violation: Your account permissions only allow managing the "${captainSquad}" roster.`
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          message: err?.message || 'Failed to add player to official roster.'
+        });
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleDeletePlayer = async (id: string) => {
-    if (window.confirm('Remove this player from the official roster?')) {
-      try {
-        await deleteRosterPlayer(id);
-      } catch (err) {
-        console.error('Failed to delete player:', err);
+  const handleDeletePlayer = async (player: RosterPlayer) => {
+    if (isCaptain && player.game !== captainSquad) {
+      setFeedback({
+        type: 'error',
+        message: `Security Scope Violation: Captains may only remove players from their assigned division (${captainSquad}).`
+      });
+      return;
+    }
+
+    if (!window.confirm(`Confirm removal of "${player.name}" from the ${player.game} roster?`)) {
+      return;
+    }
+
+    setFeedback(null);
+    try {
+      await deleteRosterPlayer(player.id);
+      setFeedback({
+        type: 'success',
+        message: `Player "${player.name}" successfully removed from ${player.game} roster.`
+      });
+    } catch (err: any) {
+      console.error('[TeamsPage] Failed to delete player:', err);
+      if (err?.code === 'permission-denied') {
+        setFeedback({
+          type: 'error',
+          message: `Firestore Security Denied: You lack authorization to modify the ${player.game} roster.`
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          message: err?.message || 'Failed to delete player from roster.'
+        });
       }
     }
   };
@@ -73,6 +142,39 @@ export const TeamsPage: React.FC = () => {
           Official competing rosters for all Hoshima Esports divisions
         </p>
       </div>
+
+      {/* Feedback Toast */}
+      {feedback && (
+        <div
+          role="alert"
+          style={{
+            background: feedback.type === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+            border: `1px solid ${feedback.type === 'success' ? '#22c55e' : '#ef4444'}`,
+            borderRadius: '6px',
+            padding: '12px 18px',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            color: '#fff',
+            fontSize: '0.9rem'
+          }}
+        >
+          {feedback.type === 'success' ? (
+            <CheckCircle size={20} color="#22c55e" style={{ flexShrink: 0 }} />
+          ) : (
+            <ShieldAlert size={20} color="#ef4444" style={{ flexShrink: 0 }} />
+          )}
+          <span style={{ flex: 1 }}>{feedback.message}</span>
+          <button
+            onClick={() => setFeedback(null)}
+            style={{ background: 'none', border: 'none', color: '#8ca0b8', cursor: 'pointer', padding: '4px' }}
+            aria-label="Dismiss feedback"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Filter and Admin Controls */}
       <div
@@ -110,13 +212,20 @@ export const TeamsPage: React.FC = () => {
         </div>
 
         {isAdminOrCaptain && (
-          <button
-            onClick={() => setIsAddOpen(true)}
-            className="btn-primary"
-            style={{ padding: '8px 20px', fontSize: '0.85rem' }}
-          >
-            <Plus size={16} /> Add Roster Player
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {isCaptain && (
+              <span style={{ fontSize: '0.78rem', color: '#c084fc', fontFamily: 'Rajdhani, sans-serif', fontWeight: 600 }}>
+                Squad Scope: {captainSquad}
+              </span>
+            )}
+            <button
+              onClick={openAddModal}
+              className="btn-primary"
+              style={{ padding: '8px 20px', fontSize: '0.85rem' }}
+            >
+              <Plus size={16} /> Add Roster Player
+            </button>
+          </div>
         )}
       </div>
 
@@ -128,132 +237,147 @@ export const TeamsPage: React.FC = () => {
           gap: '24px'
         }}
       >
-        {filtered.map((p) => (
-          <div
-            key={p.id}
-            style={{
-              backgroundColor: 'var(--dark3)',
-              border: '1px solid rgba(255,255,255,.07)',
-              borderRadius: '8px',
-              padding: '24px 20px',
-              textAlign: 'center',
-              position: 'relative'
-            }}
-          >
-            {isAdminOrCaptain && (
-              <button
-                onClick={() => handleDeletePlayer(p.id)}
-                style={{
-                  position: 'absolute',
-                  top: '12px',
-                  right: '12px',
-                  background: 'rgba(255,70,85,.1)',
-                  border: '1px solid rgba(255,70,85,.3)',
-                  color: '#ff4655',
-                  padding: '4px',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-                title="Remove Player"
-              >
-                <Trash2 size={14} />
-              </button>
-            )}
+        {filtered.map((p) => {
+          const canDelete = isAdmin || (isCaptain && p.game === captainSquad);
 
+          return (
             <div
+              key={p.id}
               style={{
-                width: '76px',
-                height: '76px',
-                borderRadius: '50%',
-                margin: '0 auto 14px',
-                border: `2px solid ${p.color}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontFamily: 'Orbitron, monospace',
-                fontSize: '1.4rem',
-                fontWeight: 900,
-                backgroundColor: 'var(--dark2)',
-                color: p.color
+                backgroundColor: 'var(--dark3)',
+                border: '1px solid rgba(255,255,255,.07)',
+                borderRadius: '8px',
+                padding: '24px 20px',
+                textAlign: 'center',
+                position: 'relative'
               }}
             >
-              {p.name.substring(0, 2)}
-            </div>
-            <p
-              style={{
-                fontFamily: 'Rajdhani, sans-serif',
-                fontSize: '0.72rem',
-                fontWeight: 600,
-                letterSpacing: '0.2em',
-                textTransform: 'uppercase',
-                color: '#4a6a8a',
-                marginBottom: '4px'
-              }}
-            >
-              {p.tag}
-            </p>
-            <h3
-              style={{
-                fontFamily: 'Orbitron, monospace',
-                fontSize: '1.1rem',
-                fontWeight: 700,
-                color: '#fff',
-                marginBottom: '4px'
-              }}
-            >
-              {p.name}
-            </h3>
-            <p
-              style={{
-                fontFamily: 'Rajdhani, sans-serif',
-                fontSize: '0.85rem',
-                color: 'var(--cyan)',
-                fontWeight: 600,
-                marginBottom: '10px'
-              }}
-            >
-              {p.role}
-            </p>
-            {p.uid && (
+              {canDelete && (
+                <button
+                  onClick={() => handleDeletePlayer(p)}
+                  style={{
+                    position: 'absolute',
+                    top: '12px',
+                    right: '12px',
+                    background: 'rgba(255,70,85,.1)',
+                    border: '1px solid rgba(255,70,85,.3)',
+                    color: '#ff4655',
+                    padding: '4px',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                  title={`Remove ${p.name} from roster`}
+                  aria-label={`Remove ${p.name}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+
+              <div
+                style={{
+                  width: '76px',
+                  height: '76px',
+                  borderRadius: '50%',
+                  margin: '0 auto 14px',
+                  border: `2px solid ${p.color}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontFamily: 'Orbitron, monospace',
+                  fontSize: '1.4rem',
+                  fontWeight: 900,
+                  backgroundColor: 'var(--dark2)',
+                  color: p.color
+                }}
+              >
+                {p.name.substring(0, 2)}
+              </div>
               <p
                 style={{
-                  fontFamily: 'Orbitron, monospace',
-                  fontSize: '0.68rem',
-                  color: '#3a5a7a',
-                  marginBottom: '12px'
+                  fontFamily: 'Rajdhani, sans-serif',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.2em',
+                  textTransform: 'uppercase',
+                  color: '#4a6a8a',
+                  marginBottom: '4px'
                 }}
               >
-                UID: {p.uid}
+                {p.tag}
               </p>
-            )}
-            <span
-              style={{
-                display: 'inline-block',
-                padding: '4px 12px',
-                borderRadius: '100px',
-                fontSize: '0.72rem',
-                fontFamily: 'Rajdhani, sans-serif',
-                fontWeight: 600,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                backgroundColor: 'rgba(0, 229, 255, 0.08)',
-                border: '1px solid rgba(0, 229, 255, 0.2)',
-                color: 'var(--cyan)'
-              }}
-            >
-              {p.game}
-            </span>
-          </div>
-        ))}
+              <h3
+                style={{
+                  fontFamily: 'Orbitron, monospace',
+                  fontSize: '1.1rem',
+                  fontWeight: 700,
+                  color: '#fff',
+                  marginBottom: '4px'
+                }}
+              >
+                {p.name}
+              </h3>
+              <p
+                style={{
+                  fontFamily: 'Rajdhani, sans-serif',
+                  fontSize: '0.85rem',
+                  color: 'var(--cyan)',
+                  fontWeight: 600,
+                  marginBottom: '10px'
+                }}
+              >
+                {p.role}
+              </p>
+              {p.uid && (
+                <p
+                  style={{
+                    fontFamily: 'Orbitron, monospace',
+                    fontSize: '0.68rem',
+                    color: '#3a5a7a',
+                    marginBottom: '12px'
+                  }}
+                >
+                  UID: {p.uid}
+                </p>
+              )}
+              <span
+                style={{
+                  display: 'inline-block',
+                  padding: '4px 12px',
+                  borderRadius: '100px',
+                  fontSize: '0.72rem',
+                  fontFamily: 'Rajdhani, sans-serif',
+                  fontWeight: 600,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  backgroundColor: 'rgba(0, 229, 255, 0.08)',
+                  border: '1px solid rgba(0, 229, 255, 0.2)',
+                  color: 'var(--cyan)'
+                }}
+              >
+                {p.game}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Add Modal */}
       {isAddOpen && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3 style={{ fontFamily: 'Orbitron, monospace', color: '#fff', fontSize: '1.2rem', marginBottom: '20px' }}>
-              Add Roster Player
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontFamily: 'Orbitron, monospace', color: '#fff', fontSize: '1.2rem' }}>
+                Add Roster Player
+              </h3>
+              <button
+                onClick={() => setIsAddOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#8ca0b8', cursor: 'pointer' }}
+                aria-label="Close modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
             <form onSubmit={handleAddPlayer} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px' }}>
@@ -321,26 +445,46 @@ export const TeamsPage: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: '#4a6a8a', marginBottom: '6px' }}>
-                  GAME
+                  GAME DIVISION {isCaptain && <span style={{ color: '#c084fc' }}>(Captain Scope: Locked)</span>}
                 </label>
-                <select
-                  value={game}
-                  onChange={(e) => setGame(e.target.value)}
-                  style={{
-                    width: '100%',
-                    background: 'var(--dark2)',
-                    border: '1px solid rgba(255,255,255,.1)',
-                    borderRadius: '6px',
-                    padding: '10px 14px',
-                    color: '#fff',
-                    outline: 'none'
-                  }}
-                >
-                  <option value="Free Fire Max">Free Fire Max</option>
-                  <option value="BGMI">BGMI</option>
-                  <option value="Valorant">Valorant</option>
-                  <option value="Mobile Legends">Mobile Legends</option>
-                </select>
+                {isCaptain ? (
+                  <input
+                    type="text"
+                    readOnly
+                    value={captainSquad}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(168,85,247,0.08)',
+                      border: '1px solid rgba(168,85,247,0.3)',
+                      borderRadius: '6px',
+                      padding: '10px 14px',
+                      color: '#c084fc',
+                      fontWeight: 700,
+                      outline: 'none',
+                      cursor: 'not-allowed'
+                    }}
+                  />
+                ) : (
+                  <select
+                    value={game}
+                    onChange={(e) => setGame(e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'var(--dark2)',
+                      border: '1px solid rgba(255,255,255,.1)',
+                      borderRadius: '6px',
+                      padding: '10px 14px',
+                      color: '#fff',
+                      outline: 'none'
+                    }}
+                  >
+                    {SQUADS_OPTIONS.map((sq) => (
+                      <option key={sq} value={sq}>
+                        {sq}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>
@@ -373,8 +517,13 @@ export const TeamsPage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary" style={{ padding: '8px 22px' }}>
-                  Save Player
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="btn-primary"
+                  style={{ padding: '8px 22px', opacity: submitting ? 0.7 : 1 }}
+                >
+                  {submitting ? 'Saving...' : 'Save Player'}
                 </button>
               </div>
             </form>

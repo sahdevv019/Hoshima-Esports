@@ -410,6 +410,21 @@ nav.hoshima-nav {
   color: #ff4655;
 }
 
+/* Table and responsive card utilities */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.desktop-table-container {
+  display: block;
+}
+
+.mobile-cards-container {
+  display: none;
+}
+
 /* RESPONSIVE */
 @media (max-width: 900px) {
   nav.hoshima-nav {
@@ -432,6 +447,12 @@ nav.hoshima-nav {
     justify-content: center;
     flex-wrap: wrap;
     gap: 12px;
+  }
+  .desktop-table-container {
+    display: none !important;
+  }
+  .mobile-cards-container {
+    display: flex !important;
   }
   .comms-container {
     grid-template-columns: 1fr !important;

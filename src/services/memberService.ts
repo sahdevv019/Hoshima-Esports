@@ -31,7 +31,8 @@ export function subscribeToAllUsers(callback: (users: UserProfile[]) => void) {
 }
 
 /**
- * Assign Captain role to a member, optionally assigning a squad/game
+ * Assign Captain role to a member, optionally assigning a squad/game.
+ * Invariant: Captain permissions can only be granted to active, approved operatives.
  */
 export async function assignCaptainRole(
   targetUid: string,
@@ -50,9 +51,19 @@ export async function assignCaptainRole(
     throw new Error('Cannot demote or change squad of an active Admin via Captain assignment.');
   }
 
+  if (targetData.status !== 'approved') {
+    throw new Error(
+      `Invalid Action: Operative status is '${targetData.status}'. Only active, approved Members can be appointed as Captain.`
+    );
+  }
+
+  if (!assignedSquad || !assignedSquad.trim()) {
+    throw new Error('A valid competitive game division is required for Captain assignment.');
+  }
+
   await updateDoc(targetRef, {
     role: 'captain',
-    assignedSquad,
+    assignedSquad: assignedSquad.trim(),
     updatedAt: serverTimestamp()
   });
 }
@@ -82,6 +93,7 @@ export async function revokeCaptainRole(targetUid: string): Promise<void> {
 /**
  * Change user role safely.
  * Invariant: Protects against removing or demoting the final active admin!
+ * Invariant: Captaincy requires an approved account status.
  */
 export async function changeUserRole(
   targetUid: string,
@@ -95,12 +107,20 @@ export async function changeUserRole(
     throw new Error('User profile not found.');
   }
 
-  const currentRole = targetSnap.data().role;
+  const targetData = targetSnap.data() as UserProfile;
+  const currentRole = targetData.role;
 
   // If attempting to demote an admin, reject immediately: Firestore rules strictly forbid admin demotion via client writes
   if (currentRole === 'admin' && newRole !== 'admin') {
     throw new Error(
       'Action Denied: Admin demotion is locked in the client application to protect organizational access. Administrative changes require operator console access.'
+    );
+  }
+
+  // Prevent assigning Captain to an unapproved user
+  if (newRole === 'captain' && targetData.status !== 'approved') {
+    throw new Error(
+      'Invalid Action: Cannot appoint Captain role to an unapproved operative. Approve their application first.'
     );
   }
 

@@ -21,6 +21,7 @@ export const RecruitmentPage: React.FC = () => {
   const [bio, setBio] = useState('');
 
   const [existingStatus, setExistingStatus] = useState<string | null>(null);
+  const [existingReason, setExistingReason] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -37,6 +38,7 @@ export const RecruitmentPage: React.FC = () => {
       getApplicationByUid(currentUser.uid).then((app) => {
         if (app) {
           setExistingStatus(app.status);
+          setExistingReason(app.rejectionReason || null);
           setDisplayName(app.displayName || '');
           setGamingUsername(app.gamingUsername || '');
           setPreferredGame(app.preferredGame || 'Free Fire Max');
@@ -166,10 +168,7 @@ export const RecruitmentPage: React.FC = () => {
           {existingStatus && (
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 18px',
+                padding: '16px 20px',
                 borderRadius: '8px',
                 marginBottom: '24px',
                 background:
@@ -192,16 +191,48 @@ export const RecruitmentPage: React.FC = () => {
                     : '#facc15'
               }}
             >
-              {existingStatus === 'approved' ? (
-                <CheckCircle2 size={20} />
-              ) : existingStatus === 'rejected' ? (
-                <AlertCircle size={20} />
-              ) : (
-                <Clock size={20} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: existingStatus === 'rejected' || existingStatus === 'approved' ? '8px' : '0' }}>
+                {existingStatus === 'approved' ? (
+                  <CheckCircle2 size={20} />
+                ) : existingStatus === 'rejected' ? (
+                  <AlertCircle size={20} />
+                ) : (
+                  <Clock size={20} />
+                )}
+                <span style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '0.95rem' }}>
+                  Application Status: {existingStatus}
+                </span>
+              </div>
+
+              {existingStatus === 'approved' && (
+                <div style={{ marginTop: '8px' }}>
+                  <p style={{ color: '#8ca0b8', fontSize: '0.88rem', marginBottom: '12px' }}>
+                    Congratulations! Your recruitment dossier was approved and your account is an activated Member.
+                  </p>
+                  <Link to="/dashboard" className="btn-primary" style={{ padding: '8px 18px', fontSize: '0.85rem', display: 'inline-block' }}>
+                    Go to Member Dashboard →
+                  </Link>
+                </div>
               )}
-              <span style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                Application Status: {existingStatus}
-              </span>
+
+              {existingStatus === 'rejected' && (
+                <div style={{ marginTop: '8px' }}>
+                  {existingReason && (
+                    <p style={{ color: '#ff8a98', fontSize: '0.88rem', marginBottom: '6px' }}>
+                      <strong>Review Note:</strong> "{existingReason}"
+                    </p>
+                  )}
+                  <p style={{ color: '#8ca0b8', fontSize: '0.82rem', lineHeight: 1.5 }}>
+                    In accordance with organization rules, client resubmissions are locked once decided. If you wish to appeal based on updated tournament stats, please contact team management on Discord.
+                  </p>
+                </div>
+              )}
+
+              {existingStatus === 'pending' && (
+                <p style={{ color: '#8ca0b8', fontSize: '0.82rem', marginTop: '6px' }}>
+                  Your dossier is in the administrative review queue. You may update your submitted details below while pending.
+                </p>
+              )}
             </div>
           )}
 
@@ -452,15 +483,25 @@ export const RecruitmentPage: React.FC = () => {
 
             <button
               type="submit"
-              disabled={loading || existingStatus === 'approved'}
+              disabled={loading || existingStatus === 'approved' || existingStatus === 'rejected'}
               className="btn-primary"
               style={{
                 marginTop: '10px',
                 width: '100%',
-                opacity: loading || existingStatus === 'approved' ? 0.6 : 1
+                opacity: loading || existingStatus === 'approved' || existingStatus === 'rejected' ? 0.6 : 1,
+                cursor: existingStatus === 'approved' || existingStatus === 'rejected' ? 'not-allowed' : 'pointer'
               }}
             >
-              <Send size={18} /> {loading ? 'Transmitting Application...' : 'Submit Application for Admin Review'}
+              <Send size={18} />{' '}
+              {loading
+                ? 'Transmitting Application...'
+                : existingStatus === 'approved'
+                ? 'Application Approved'
+                : existingStatus === 'rejected'
+                ? 'Application Declined (Resubmission Locked)'
+                : existingStatus === 'pending'
+                ? 'Update Pending Application'
+                : 'Submit Application for Admin Review'}
             </button>
           </form>
         </div>

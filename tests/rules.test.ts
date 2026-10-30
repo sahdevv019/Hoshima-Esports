@@ -255,6 +255,37 @@ describe('Firestore Security Rules', () => {
       );
     });
 
+    it('captains CANNOT update other users or grant admin privileges', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const adminDb = context.firestore();
+        await adminDb.collection('users').doc('capt1').set({
+          uid: 'capt1',
+          displayName: 'Captain One',
+          gamingUsername: 'CAPT1',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+        await adminDb.collection('users').doc('user1').set({
+          uid: 'user1',
+          displayName: 'User One',
+          gamingUsername: 'USER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+      });
+
+      const capt = testEnv.authenticatedContext('capt1');
+      const db = capt.firestore();
+      await assertFails(
+        db.collection('users').doc('user1').update({
+          role: 'admin'
+        })
+      );
+    });
+
     it('user deletion is forbidden for all', async () => {
       await testEnv.withSecurityRulesDisabled(async (context) => {
         const adminDb = context.firestore();
@@ -401,6 +432,82 @@ describe('Firestore Security Rules', () => {
         })
       );
     });
+
+    it('non-admin (captains and members) CANNOT review or approve/reject applications', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const adminDb = context.firestore();
+        await adminDb.collection('users').doc('capt1').set({
+          uid: 'capt1',
+          displayName: 'Captain One',
+          gamingUsername: 'CAPT1',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+        await adminDb.collection('applications').doc('applicant1').set({
+          id: 'applicant1',
+          uid: 'applicant1',
+          displayName: 'Applicant One',
+          gamingUsername: 'APPLICANT1',
+          preferredGame: 'Free Fire Max',
+          inGameId: 'FF-555',
+          preferredRole: 'Fragger',
+          bio: 'Competitive player looking to join Hoshima.',
+          status: 'pending'
+        });
+      });
+
+      const capt = testEnv.authenticatedContext('capt1');
+      const db = capt.firestore();
+      await assertFails(
+        db.collection('applications').doc('applicant1').update({
+          status: 'approved',
+          reviewedBy: 'capt1'
+        })
+      );
+      await assertFails(
+        db.collection('applications').doc('applicant1').update({
+          status: 'rejected',
+          rejectionReason: 'Not suitable',
+          reviewedBy: 'capt1'
+        })
+      );
+    });
+
+    it('rejected applicant CANNOT alter or resubmit application once declined', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const adminDb = context.firestore();
+        await adminDb.collection('applications').doc('applicant2').set({
+          id: 'applicant2',
+          uid: 'applicant2',
+          displayName: 'Applicant Two',
+          gamingUsername: 'APPLICANT2',
+          preferredGame: 'Free Fire Max',
+          inGameId: 'FF-777',
+          preferredRole: 'Sniper',
+          bio: 'Long-range specialist.',
+          status: 'rejected',
+          rejectionReason: 'Roster full at this time',
+          reviewedBy: 'admin1'
+        });
+      });
+
+      const applicant2 = testEnv.authenticatedContext('applicant2');
+      const db = applicant2.firestore();
+      // Cannot edit bio or attempt to reset status
+      await assertFails(
+        db.collection('applications').doc('applicant2').update({
+          bio: 'Please reconsider my application.',
+          status: 'pending'
+        })
+      );
+      await assertFails(
+        db.collection('applications').doc('applicant2').update({
+          bio: 'Please reconsider my application.'
+        })
+      );
+    });
   });
 
   describe('roster collection', () => {
@@ -506,6 +613,38 @@ describe('Firestore Security Rules', () => {
 
       // Delete player in BGMI: FAIL
       await assertFails(db.collection('roster').doc('bgmi_p1').delete());
+    });
+
+    it('captain CANNOT reassign a player game to a different squad', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const adminDb = context.firestore();
+        await adminDb.collection('users').doc('ff_capt').set({
+          uid: 'ff_capt',
+          displayName: 'FF Captain',
+          gamingUsername: 'FF_CAPT',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+        await adminDb.collection('roster').doc('ff_p1').set({
+          name: 'Viper',
+          tag: 'VIPER',
+          role: 'IGL',
+          game: 'Free Fire Max',
+          color: '#00e5ff'
+        });
+      });
+
+      const ffCapt = testEnv.authenticatedContext('ff_capt');
+      const db = ffCapt.firestore();
+
+      // Attempt to change game from Free Fire Max to Valorant: FAIL
+      await assertFails(
+        db.collection('roster').doc('ff_p1').update({
+          game: 'Valorant'
+        })
+      );
     });
   });
 

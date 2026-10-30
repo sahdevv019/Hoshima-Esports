@@ -4,7 +4,7 @@ import { GAMES_DATA } from '../../data/defaultGames';
 import { useAuth } from '../../context/AuthContext';
 import { subscribeToChannelMessages, sendChannelMessage } from '../../services/chatService';
 import type { ChatMessage } from '../../types/roster';
-import { ArrowLeft, Send, Users, Target } from 'lucide-react';
+import { ArrowLeft, Send, Users, Target, Lock } from 'lucide-react';
 
 const CHANNELS = [
   { id: 'general', name: 'general', desc: 'General squad discussion' },
@@ -29,6 +29,12 @@ export const GameHubPage: React.FC = () => {
   const isMemberOrAbove = role === 'member' || role === 'captain' || role === 'admin';
 
   useEffect(() => {
+    // Only subscribe to private chat channels if user has approved member clearance
+    if (!isMemberOrAbove) {
+      setMessages([]);
+      return;
+    }
+
     const unsub = subscribeToChannelMessages(game.id, currentChannel, (msgs) => {
       setMessages(msgs);
       setTimeout(() => {
@@ -38,7 +44,7 @@ export const GameHubPage: React.FC = () => {
       }, 50);
     });
     return () => unsub();
-  }, [game.id, currentChannel]);
+  }, [game.id, currentChannel, isMemberOrAbove]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,10 +192,26 @@ export const GameHubPage: React.FC = () => {
         {/* TAB 1: SCRIMS */}
         {activeTab === 'scrims' && (
           <div>
-            <h2 style={{ fontFamily: 'Orbitron, monospace', fontSize: '1.4rem', color: '#fff', marginBottom: '6px' }}>
-              Upcoming Scrimmage Sessions
-            </h2>
-            <p style={{ color: '#5a7a9a', marginBottom: '32px' }}>Join practice matches and official team scrims.</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'Orbitron, monospace', fontSize: '1.4rem', color: '#fff', marginBottom: '6px' }}>
+                  Upcoming Scrimmage Sessions
+                </h2>
+                <p style={{ color: '#5a7a9a' }}>
+                  Live team scrimmage timetable. Match coordination, lobby passwords, and check-ins are organized inside <strong style={{ color: 'var(--cyan)' }}>#scrim-lobby</strong>.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setCurrentChannel('scrim-lobby');
+                  setActiveTab('chat');
+                }}
+                className="btn-outline"
+                style={{ padding: '8px 16px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                Open #scrim-lobby Comms →
+              </button>
+            </div>
 
             <div
               style={{
@@ -245,11 +267,14 @@ export const GameHubPage: React.FC = () => {
                   </div>
 
                   <button
-                    disabled={s.status === 'full'}
+                    onClick={() => {
+                      setCurrentChannel('scrim-lobby');
+                      setActiveTab('chat');
+                    }}
                     className="btn-outline"
-                    style={{ width: '100%', padding: '10px', fontSize: '0.85rem', opacity: s.status === 'full' ? 0.4 : 1 }}
+                    style={{ width: '100%', padding: '10px', fontSize: '0.85rem' }}
                   >
-                    {s.status === 'full' ? 'Lobby Full' : 'Register for Scrim →'}
+                    {s.status === 'full' ? 'Lobby Full — Open #scrim-lobby' : 'Join Coordination in #scrim-lobby →'}
                   </button>
                 </div>
               ))}
@@ -455,7 +480,48 @@ export const GameHubPage: React.FC = () => {
 
                 {/* Messages scroll */}
                 <div ref={chatScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {messages.length === 0 ? (
+                  {!isMemberOrAbove ? (
+                    <div style={{ textAlign: 'center', margin: 'auto', maxWidth: '380px', padding: '24px 16px' }}>
+                      <div
+                        style={{
+                          width: '48px',
+                          height: '48px',
+                          borderRadius: '50%',
+                          background: 'rgba(0, 229, 255, 0.08)',
+                          border: '1px solid rgba(0, 229, 255, 0.25)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          margin: '0 auto 16px'
+                        }}
+                      >
+                        <Lock size={22} color="var(--cyan)" />
+                      </div>
+                      <h4 style={{ fontFamily: 'Orbitron, monospace', fontSize: '1rem', color: '#fff', marginBottom: '8px' }}>
+                        RESTRICTED FREQUENCY
+                      </h4>
+                      <p style={{ color: '#7a9ab5', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '20px' }}>
+                        This channel is encrypted for approved Hoshima operatives. Sign in with an authorized member profile to view transmissions and collaborate with the squad.
+                      </p>
+                      {!currentUser ? (
+                        <Link
+                          to="/login"
+                          className="btn-primary"
+                          style={{ display: 'inline-flex', padding: '8px 22px', fontSize: '0.85rem', textDecoration: 'none' }}
+                        >
+                          Sign In with Google
+                        </Link>
+                      ) : (
+                        <Link
+                          to="/pending"
+                          className="btn-primary"
+                          style={{ display: 'inline-flex', padding: '8px 22px', fontSize: '0.85rem', textDecoration: 'none' }}
+                        >
+                          View Application Status
+                        </Link>
+                      )}
+                    </div>
+                  ) : messages.length === 0 ? (
                     <p style={{ color: '#3a5a7a', fontSize: '0.88rem', margin: 'auto' }}>No messages yet in #{currentChannel}.</p>
                   ) : (
                     messages.map((m, idx) => (
