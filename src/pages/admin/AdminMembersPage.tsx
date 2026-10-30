@@ -191,8 +191,10 @@ export const AdminMembersPage: React.FC = () => {
                   </td>
 
                   <td style={{ padding: '14px 12px' }}>
-                    {isSelf ? (
-                      <span className="role-badge-admin">ADMIN (IMMUTABLE)</span>
+                    {u.role === 'admin' ? (
+                      <span className="role-badge-admin" title="Admin accounts are protected against client-side demotion">
+                        ADMIN {isSelf ? '(YOU)' : '(PROTECTED)'}
+                      </span>
                     ) : (
                       <select
                         value={u.role}
@@ -214,7 +216,7 @@ export const AdminMembersPage: React.FC = () => {
                         <option value="pending">Pending</option>
                         <option value="member">Member</option>
                         <option value="captain">Captain</option>
-                        <option value="admin">Admin</option>
+                        <option value="admin">Promote to Admin</option>
                       </select>
                     )}
                   </td>

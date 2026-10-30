@@ -100,16 +100,11 @@ export async function changeUserRole(
 
   const currentRole = targetSnap.data().role;
 
-  // If demoting an admin, ensure they are not the sole remaining admin
+  // If attempting to demote an admin, reject immediately: Firestore rules strictly forbid admin demotion via client writes
   if (currentRole === 'admin' && newRole !== 'admin') {
-    const adminQuery = query(collection(db, 'users'), where('role', '==', 'admin'));
-    const adminSnaps = await getDocs(adminQuery);
-
-    if (adminSnaps.size <= 1) {
-      throw new Error(
-        'Action Denied: Cannot demote the final active administrator. At least one active admin must exist.'
-      );
-    }
+    throw new Error(
+      'Action Denied: Admin demotion is locked in the client application to protect organizational access. Administrative changes require operator console access.'
+    );
   }
 
   await updateDoc(targetRef, {
