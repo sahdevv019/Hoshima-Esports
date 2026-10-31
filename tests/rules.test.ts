@@ -1340,6 +1340,58 @@ describe('Firestore Security Rules', () => {
         })
       );
     });
+
+    it('approved member can read registered rosters in scrim lobby, but pending/unauthenticated cannot', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('users').doc('member2').set({
+          uid: 'member2',
+          displayName: 'Member Two',
+          gamingUsername: 'MEMBER2',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('users').doc('pending1').set({
+          uid: 'pending1',
+          displayName: 'Pending One',
+          gamingUsername: 'PENDING1',
+          preferredGame: 'Free Fire Max',
+          role: 'pending',
+          status: 'pending'
+        });
+        await db.collection('scrim_registrations').doc('scrim1_member1').set({
+          id: 'scrim1_member1',
+          scrimId: 'scrim1',
+          game: 'Free Fire Max',
+          userId: 'member1',
+          userName: 'MEMBER1',
+          teamName: 'Team Phoenix',
+          contact: 'Discord#1234',
+          status: 'registered'
+        });
+      });
+
+      // Approved peer member can read: SUCCEED
+      const member2 = testEnv.authenticatedContext('member2');
+      await assertSucceeds(member2.firestore().collection('scrim_registrations').doc('scrim1_member1').get());
+
+      // Pending user cannot read: FAIL
+      const pending = testEnv.authenticatedContext('pending1');
+      await assertFails(pending.firestore().collection('scrim_registrations').doc('scrim1_member1').get());
+
+      // Unauthenticated visitor cannot read: FAIL
+      const unauth = testEnv.unauthenticatedContext();
+      await assertFails(unauth.firestore().collection('scrim_registrations').doc('scrim1_member1').get());
+    });
   });
 
   describe('tournaments collection', () => {

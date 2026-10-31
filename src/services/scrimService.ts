@@ -99,6 +99,30 @@ export async function getScrimById(scrimId: string): Promise<Scrim | null> {
 }
 
 /**
+ * Real-time subscription to a single Scrim by document ID
+ */
+export function subscribeToScrimById(
+  scrimId: string,
+  callback: (scrim: Scrim | null) => void
+) {
+  const scrimRef = doc(db, 'scrims', scrimId);
+  return onSnapshot(
+    scrimRef,
+    (snap) => {
+      if (!snap.exists()) {
+        callback(null);
+        return;
+      }
+      callback({ ...(snap.data() as Omit<Scrim, 'id'>), id: snap.id });
+    },
+    (err) => {
+      console.error('[Hoshima Scrims] Error subscribing to scrim by ID:', err);
+      callback(null);
+    }
+  );
+}
+
+/**
  * Create a new competitive scrim
  */
 export async function createScrim(
@@ -233,11 +257,15 @@ export async function withdrawFromScrim(scrimId: string, userId: string): Promis
     // Reopen registration if it was closed due to capacity and deadline hasn't passed
     let newStatus = scrim.status;
     if (scrim.status === 'registration-closed') {
-      const deadlineDate =
-        scrim.registrationDeadline instanceof Timestamp
-          ? scrim.registrationDeadline.toDate()
-          : new Date(scrim.registrationDeadline);
-      if (new Date() < deadlineDate) {
+      let deadlinePassed = false;
+      if (scrim.registrationDeadline) {
+        const deadlineDate =
+          scrim.registrationDeadline instanceof Timestamp
+            ? scrim.registrationDeadline.toDate()
+            : new Date(scrim.registrationDeadline);
+        deadlinePassed = !isNaN(deadlineDate.getTime()) && new Date() >= deadlineDate;
+      }
+      if (!deadlinePassed) {
         newStatus = 'registration-open';
       }
     }
@@ -268,8 +296,7 @@ export function subscribeToScrimRegistrations(
   const q = query(
     regsRef,
     where('scrimId', '==', scrimId),
-    where('status', '==', 'registered'),
-    orderBy('registeredAt', 'asc')
+    where('status', '==', 'registered')
   );
 
   return onSnapshot(
@@ -278,6 +305,11 @@ export function subscribeToScrimRegistrations(
       const regs: ScrimRegistration[] = [];
       snapshot.forEach((d) => {
         regs.push(d.data() as ScrimRegistration);
+      });
+      regs.sort((a, b) => {
+        const tA = (a.registeredAt as any)?.toMillis?.() || 0;
+        const tB = (b.registeredAt as any)?.toMillis?.() || 0;
+        return tA - tB;
       });
       callback(regs);
     },

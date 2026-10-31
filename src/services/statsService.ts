@@ -3,7 +3,6 @@ import {
   getDocs,
   query,
   where,
-  orderBy,
   limit
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -39,17 +38,7 @@ const DEFAULT_TOP_PLAYERS: PlayerCompetitiveStats[] = [
  */
 export async function getConfirmedMatches(gameFilter?: string): Promise<CompetitiveMatch[]> {
   const matchesRef = collection(db, 'matches');
-  let q = query(matchesRef, where('isConfirmed', '==', true), orderBy('completedAt', 'desc'), limit(150));
-
-  if (gameFilter && gameFilter !== 'All') {
-    q = query(
-      matchesRef,
-      where('game', '==', gameFilter),
-      where('isConfirmed', '==', true),
-      orderBy('completedAt', 'desc'),
-      limit(150)
-    );
-  }
+  const q = query(matchesRef, where('isConfirmed', '==', true), limit(150));
 
   try {
     const snap = await getDocs(q);
@@ -57,9 +46,18 @@ export async function getConfirmedMatches(gameFilter?: string): Promise<Competit
     snap.forEach((d) => {
       const data = d.data() as Omit<CompetitiveMatch, 'id'>;
       if (data.isConfirmed && data.confirmedBy) {
-        matches.push({ ...data, id: d.id });
+        if (!gameFilter || gameFilter === 'All' || data.game === gameFilter) {
+          matches.push({ ...data, id: d.id });
+        }
       }
     });
+
+    matches.sort((a, b) => {
+      const tA = (a.completedAt as any)?.toMillis?.() || 0;
+      const tB = (b.completedAt as any)?.toMillis?.() || 0;
+      return tB - tA;
+    });
+
     return matches;
   } catch (err) {
     console.warn('[Hoshima Stats] Error querying confirmed matches, returning baseline:', err);

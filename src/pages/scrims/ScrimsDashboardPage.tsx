@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -59,15 +59,20 @@ export const ScrimsDashboardPage: React.FC = () => {
       getUserScrimRegistrations(currentUser.uid)
         .then(setUserRegistrations)
         .catch(console.error);
+    } else {
+      setUserRegistrations([]);
     }
   }, [currentUser, scrims]);
 
-  const registeredScrimIds = new Set(userRegistrations.map((r) => r.scrimId));
+  const registeredScrimIds = useMemo(
+    () => new Set(userRegistrations.map((r) => r.scrimId)),
+    [userRegistrations]
+  );
 
-  const filteredScrims =
-    activeTab === 'my-scrims'
-      ? scrims.filter((s) => registeredScrimIds.has(s.id))
-      : scrims;
+  const filteredScrims = useMemo(
+    () => (activeTab === 'my-scrims' ? scrims.filter((s) => registeredScrimIds.has(s.id)) : scrims),
+    [activeTab, scrims, registeredScrimIds]
+  );
 
   const getStatusBadge = (scrim: Scrim) => {
     switch (scrim.status) {

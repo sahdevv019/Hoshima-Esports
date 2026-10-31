@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   getTournamentById,
+  subscribeToTournamentById,
   subscribeToTournamentRegistrations,
   subscribeToTournamentMatches,
   registerTeamForTournament,
@@ -67,20 +68,16 @@ export const TournamentDetailsPage: React.FC = () => {
     if (!tournamentId) return;
 
     setLoading(true);
-    getTournamentById(tournamentId)
-      .then((data) => {
-        setTournament(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Failed to fetch tournament:', err);
-        setLoading(false);
-      });
+    const unsubTourn = subscribeToTournamentById(tournamentId, (data) => {
+      setTournament(data);
+      setLoading(false);
+    });
 
     const unsubRegs = subscribeToTournamentRegistrations(tournamentId, setRegistrations);
     const unsubMatches = subscribeToTournamentMatches(tournamentId, setMatches);
 
     return () => {
+      unsubTourn();
       unsubRegs();
       unsubMatches();
     };
@@ -226,12 +223,14 @@ export const TournamentDetailsPage: React.FC = () => {
   };
 
   // Group matches by round for Single Elimination bracket view
-  const matchesByRound = matches.reduce<Record<string, CompetitiveMatch[]>>((acc, m) => {
-    const roundKey = typeof m.round === 'number' ? `Round ${m.round}` : String(m.round || 'Round 1');
-    if (!acc[roundKey]) acc[roundKey] = [];
-    acc[roundKey].push(m);
-    return acc;
-  }, {});
+  const matchesByRound = useMemo(() => {
+    return matches.reduce<Record<string, CompetitiveMatch[]>>((acc, m) => {
+      const roundKey = typeof m.round === 'number' ? `Round ${m.round}` : String(m.round || 'Round 1');
+      if (!acc[roundKey]) acc[roundKey] = [];
+      acc[roundKey].push(m);
+      return acc;
+    }, {});
+  }, [matches]);
 
   return (
     <div

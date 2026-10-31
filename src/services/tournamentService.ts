@@ -101,6 +101,30 @@ export async function getTournamentById(tournamentId: string): Promise<Tournamen
 }
 
 /**
+ * Real-time subscription to a single tournament by ID
+ */
+export function subscribeToTournamentById(
+  tournamentId: string,
+  callback: (tournament: Tournament | null) => void
+) {
+  const docRef = doc(db, 'tournaments', tournamentId);
+  return onSnapshot(
+    docRef,
+    (snap) => {
+      if (!snap.exists()) {
+        callback(null);
+        return;
+      }
+      callback({ ...(snap.data() as Omit<Tournament, 'id'>), id: snap.id });
+    },
+    (err) => {
+      console.error('[Hoshima Tournaments] Error subscribing to tournament by ID:', err);
+      callback(null);
+    }
+  );
+}
+
+/**
  * Create a new Tournament (Admin only)
  */
 export async function createTournament(
@@ -226,11 +250,15 @@ export async function withdrawTeamFromTournament(tournamentId: string, captainUi
 
     let newStatus = tournament.status;
     if (tournament.status === 'registration-closed') {
-      const deadline =
-        tournament.registrationDeadline instanceof Timestamp
-          ? tournament.registrationDeadline.toDate()
-          : new Date(tournament.registrationDeadline);
-      if (new Date() < deadline) {
+      let deadlinePassed = false;
+      if (tournament.registrationDeadline) {
+        const deadline =
+          tournament.registrationDeadline instanceof Timestamp
+            ? tournament.registrationDeadline.toDate()
+            : new Date(tournament.registrationDeadline);
+        deadlinePassed = !isNaN(deadline.getTime()) && new Date() >= deadline;
+      }
+      if (!deadlinePassed) {
         newStatus = 'registration-open';
       }
     }
@@ -259,8 +287,7 @@ export function subscribeToTournamentRegistrations(
   const q = query(
     regsRef,
     where('tournamentId', '==', tournamentId),
-    where('status', 'in', ['registered', 'approved']),
-    orderBy('registeredAt', 'asc')
+    where('status', 'in', ['registered', 'approved'])
   );
 
   return onSnapshot(
@@ -269,6 +296,11 @@ export function subscribeToTournamentRegistrations(
       const regs: TournamentRegistration[] = [];
       snapshot.forEach((d) => {
         regs.push(d.data() as TournamentRegistration);
+      });
+      regs.sort((a, b) => {
+        const tA = (a.registeredAt as any)?.toMillis?.() || 0;
+        const tB = (b.registeredAt as any)?.toMillis?.() || 0;
+        return tA - tB;
       });
       callback(regs);
     },

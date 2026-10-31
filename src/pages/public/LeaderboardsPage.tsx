@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   getTeamLeaderboard,
   getPlayerLeaderboard
@@ -50,15 +50,25 @@ export const LeaderboardsPage: React.FC = () => {
     };
   }, [selectedGame]);
 
-  const filteredSquads = squads.filter((s) =>
-    s.squadName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.game.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredSquads = useMemo(
+    () =>
+      squads.filter(
+        (s) =>
+          s.squadName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          s.game.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [squads, searchQuery]
   );
 
-  const filteredPlayers = players.filter((p) =>
-    p.gamingUsername.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.squad.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredPlayers = useMemo(
+    () =>
+      players.filter(
+        (p) =>
+          p.gamingUsername.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.squad.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [players, searchQuery]
   );
 
   const getRankBadge = (rank: number) => {

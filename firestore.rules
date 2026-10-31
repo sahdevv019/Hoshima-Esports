@@ -795,8 +795,12 @@ service cloud.firestore {
 
     // G. Scrim Registrations Collection
     match /scrim_registrations/{registrationId} {
-      // Public and member transparent discovery of registered rosters
-      allow read: if true;
+      // Read: Admin, approved member, or registrant owner
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        isApprovedMember() ||
+        isOwner(resource.data.userId)
+      );
 
       // Create: Approved member registering themselves with 'registered' status and valid open scrim
       allow create: if isApprovedMember() &&

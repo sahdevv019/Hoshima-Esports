@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   getScrimById,
+  subscribeToScrimById,
   subscribeToScrimRegistrations,
   registerForScrim,
   withdrawFromScrim,
@@ -67,29 +68,27 @@ export const ScrimDetailsPage: React.FC = () => {
   const isCaptain = role === 'captain';
   const isApprovedMember = role === 'member' || isCaptain || isAdmin;
 
-  // Load scrim data and listen for live registrations
+  // Load scrim data in real time and listen for live registrations
   useEffect(() => {
     if (!scrimId) return;
 
     setLoading(true);
-    getScrimById(scrimId)
-      .then((data) => {
-        setScrim(data);
-        if (data) {
-          setTeamAName(data.squad || 'Hoshima Prime');
-          setTeamBName('Opponent Squad');
-        }
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Failed to fetch scrim:', err);
-        setLoading(false);
-      });
+    const unsubScrim = subscribeToScrimById(scrimId, (data) => {
+      setScrim(data);
+      if (data) {
+        setTeamAName((prev) => prev || data.squad || 'Hoshima Prime');
+        setTeamBName((prev) => prev || 'Opponent Squad');
+      }
+      setLoading(false);
+    });
 
     const unsubRegs = subscribeToScrimRegistrations(scrimId, setRegistrations);
     getMatchesForScrim(scrimId).then(setMatches).catch(console.error);
 
-    return () => unsubRegs();
+    return () => {
+      unsubScrim();
+      unsubRegs();
+    };
   }, [scrimId]);
 
   if (loading) {
