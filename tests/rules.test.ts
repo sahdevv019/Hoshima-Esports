@@ -996,12 +996,22 @@ describe('Firestore Security Rules', () => {
       const member = testEnv.authenticatedContext('member1');
       const db = member.firestore();
 
-      // Updating participant count: SUCCEED
-      await assertSucceeds(
-        db.collection('scrims').doc('scrim_slot').update({
-          currentParticipants: 1
-        })
-      );
+      // Updating participant count in atomic batch with registration: SUCCEED
+      const batch = db.batch();
+      batch.update(db.collection('scrims').doc('scrim_slot'), {
+        currentParticipants: 1
+      });
+      batch.set(db.collection('scrim_registrations').doc('scrim_slot_member1'), {
+        id: 'scrim_slot_member1',
+        scrimId: 'scrim_slot',
+        game: 'Free Fire Max',
+        userId: 'member1',
+        userName: 'MEMBER1',
+        teamName: 'Team Phoenix',
+        contact: 'Discord#1234',
+        status: 'registered'
+      });
+      await assertSucceeds(batch.commit());
 
       // Attempting to cancel or alter rules: FAIL
       await assertFails(
@@ -1115,7 +1125,8 @@ describe('Firestore Security Rules', () => {
       const member = testEnv.authenticatedContext('member1');
       const db = member.firestore();
 
-      await assertSucceeds(
+      // Standalone registration without updating scrim counter: FAIL
+      await assertFails(
         db.collection('scrim_registrations').doc('scrim1_member1').set({
           id: 'scrim1_member1',
           scrimId: 'scrim1',
@@ -1127,6 +1138,23 @@ describe('Firestore Security Rules', () => {
           status: 'registered'
         })
       );
+
+      // Atomic registration batch (registration doc + scrim counter increment): SUCCEED
+      const regBatch = db.batch();
+      regBatch.set(db.collection('scrim_registrations').doc('scrim1_member1'), {
+        id: 'scrim1_member1',
+        scrimId: 'scrim1',
+        game: 'Free Fire Max',
+        userId: 'member1',
+        userName: 'MEMBER1',
+        teamName: 'Team Phoenix',
+        contact: 'Discord#1234',
+        status: 'registered'
+      });
+      regBatch.update(db.collection('scrims').doc('scrim1'), {
+        currentParticipants: 1
+      });
+      await assertSucceeds(regBatch.commit());
 
       // Mismatched document ID: FAIL
       await assertFails(
@@ -1196,6 +1224,22 @@ describe('Firestore Security Rules', () => {
           role: 'member',
           status: 'approved'
         });
+        await db.collection('scrims').doc('scrim1').set({
+          title: 'Daily FF Scrim',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-01T18:00:00Z',
+          registrationDeadline: '2026-11-01T17:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 1,
+          rules: 'No emulators',
+          status: 'registration-open',
+          createdBy: 'admin1',
+          creatorName: 'Admin',
+          creatorRole: 'admin'
+        });
         await db.collection('scrim_registrations').doc('scrim1_member1').set({
           id: 'scrim1_member1',
           scrimId: 'scrim1',
@@ -1211,12 +1255,22 @@ describe('Firestore Security Rules', () => {
       const member = testEnv.authenticatedContext('member1');
       const db = member.firestore();
 
-      // Withdraw: SUCCEED
-      await assertSucceeds(
+      // Standalone withdrawal without decrementing scrim counter: FAIL
+      await assertFails(
         db.collection('scrim_registrations').doc('scrim1_member1').update({
           status: 'withdrawn'
         })
       );
+
+      // Atomic withdrawal batch (status withdrawn + scrim counter decrement): SUCCEED
+      const withdrawBatch = db.batch();
+      withdrawBatch.update(db.collection('scrim_registrations').doc('scrim1_member1'), {
+        status: 'withdrawn'
+      });
+      withdrawBatch.update(db.collection('scrims').doc('scrim1'), {
+        currentParticipants: 0
+      });
+      await assertSucceeds(withdrawBatch.commit());
 
       // Self-confirm: FAIL
       await assertFails(
@@ -1384,12 +1438,30 @@ describe('Firestore Security Rules', () => {
       const capt = testEnv.authenticatedContext('ff_capt');
       const db = capt.firestore();
 
-      // Increment by 1: SUCCEED
-      await assertSucceeds(
+      // Standalone increment without registration: FAIL
+      await assertFails(
         db.collection('tournaments').doc('t_slot').update({
           currentTeams: 1
         })
       );
+
+      // Increment by 1 with atomic registration batch: SUCCEED
+      const batch = db.batch();
+      batch.update(db.collection('tournaments').doc('t_slot'), {
+        currentTeams: 1
+      });
+      batch.set(db.collection('tournament_registrations').doc('t_slot_ff_capt'), {
+        id: 't_slot_ff_capt',
+        tournamentId: 't_slot',
+        game: 'Free Fire Max',
+        captainUid: 'ff_capt',
+        captainName: 'FF Captain',
+        teamName: 'Red Phoenix Elite',
+        contact: 'Discord#5555',
+        roster: [{ name: 'Player 1', role: 'IGL' }, { name: 'Player 2', role: 'Sniper' }],
+        status: 'registered'
+      });
+      await assertSucceeds(batch.commit());
 
       // Jump by 5: FAIL
       await assertFails(
@@ -1456,8 +1528,8 @@ describe('Firestore Security Rules', () => {
       const capt = testEnv.authenticatedContext('ff_capt');
       const db = capt.firestore();
 
-      // Valid registration: SUCCEED
-      await assertSucceeds(
+      // Standalone registration without updating tournament currentTeams: FAIL
+      await assertFails(
         db.collection('tournament_registrations').doc('tourney1_ff_capt').set({
           id: 'tourney1_ff_capt',
           tournamentId: 'tourney1',
@@ -1470,6 +1542,24 @@ describe('Firestore Security Rules', () => {
           status: 'registered'
         })
       );
+
+      // Valid registration via atomic batch: SUCCEED
+      const regBatch = db.batch();
+      regBatch.set(db.collection('tournament_registrations').doc('tourney1_ff_capt'), {
+        id: 'tourney1_ff_capt',
+        tournamentId: 'tourney1',
+        game: 'Free Fire Max',
+        captainUid: 'ff_capt',
+        captainName: 'FF Captain',
+        teamName: 'Red Phoenix Elite',
+        contact: 'Discord#5555',
+        roster: [{ name: 'Player 1', role: 'IGL' }, { name: 'Player 2', role: 'Sniper' }],
+        status: 'registered'
+      });
+      regBatch.update(db.collection('tournaments').doc('tourney1'), {
+        currentTeams: 1
+      });
+      await assertSucceeds(regBatch.commit());
 
       // Attempting to self-approve: FAIL
       await assertFails(
@@ -1692,6 +1782,446 @@ describe('Firestore Security Rules', () => {
       await assertFails(
         db.collection('system_config').doc('secrets').set({ key: '123' })
       );
+    });
+  });
+
+  describe('adversarial registration and capacity integrity checks', () => {
+    // 1. Approved member increments scrim currentParticipants by exactly +1 without creating a registration
+    it('Scenario 1: Approved member increments scrim currentParticipants without creating registration: DENIED', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('scrims').doc('scrim_adv1').set({
+          title: 'Adversarial Scrim 1',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-05T18:00:00Z',
+          registrationDeadline: '2026-11-05T17:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 0,
+          rules: 'Rules',
+          status: 'registration-open',
+          createdBy: 'admin1',
+          creatorName: 'Admin',
+          creatorRole: 'admin'
+        });
+      });
+
+      const member = testEnv.authenticatedContext('member1');
+      const db = member.firestore();
+
+      // Direct write to increment without registration document
+      await assertFails(
+        db.collection('scrims').doc('scrim_adv1').update({
+          currentParticipants: 1
+        })
+      );
+    });
+
+    // 2. Approved member decrements currentParticipants by exactly -1 without withdrawing a registration
+    it('Scenario 2: Approved member decrements currentParticipants without withdrawing registration: DENIED', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('scrims').doc('scrim_adv2').set({
+          title: 'Adversarial Scrim 2',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-05T18:00:00Z',
+          registrationDeadline: '2026-11-05T17:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 1,
+          rules: 'Rules',
+          status: 'registration-open',
+          createdBy: 'admin1',
+          creatorName: 'Admin',
+          creatorRole: 'admin'
+        });
+        await db.collection('scrim_registrations').doc('scrim_adv2_member1').set({
+          id: 'scrim_adv2_member1',
+          scrimId: 'scrim_adv2',
+          game: 'Free Fire Max',
+          userId: 'member1',
+          userName: 'MEMBER1',
+          teamName: 'Team Phoenix',
+          contact: 'Discord#1234',
+          status: 'registered'
+        });
+      });
+
+      const member = testEnv.authenticatedContext('member1');
+      const db = member.firestore();
+
+      // Direct write to decrement scrim counter without updating registration to withdrawn
+      await assertFails(
+        db.collection('scrims').doc('scrim_adv2').update({
+          currentParticipants: 0
+        })
+      );
+    });
+
+    // 3. Approved member creates a scrim registration without updating the parent scrim counter
+    it('Scenario 3: Approved member creates scrim registration without updating parent scrim counter: DENIED', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('scrims').doc('scrim_adv3').set({
+          title: 'Adversarial Scrim 3',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-05T18:00:00Z',
+          registrationDeadline: '2026-11-05T17:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 0,
+          rules: 'Rules',
+          status: 'registration-open',
+          createdBy: 'admin1',
+          creatorName: 'Admin',
+          creatorRole: 'admin'
+        });
+      });
+
+      const member = testEnv.authenticatedContext('member1');
+      const db = member.firestore();
+
+      // Direct write to create registration document alone
+      await assertFails(
+        db.collection('scrim_registrations').doc('scrim_adv3_member1').set({
+          id: 'scrim_adv3_member1',
+          scrimId: 'scrim_adv3',
+          game: 'Free Fire Max',
+          userId: 'member1',
+          userName: 'MEMBER1',
+          teamName: 'Team Phoenix',
+          contact: 'Discord#1234',
+          status: 'registered'
+        })
+      );
+    });
+
+    // 4. Approved member creates multiple registrations that exceed the available capacity
+    it('Scenario 4: Approved member creates multiple registrations exceeding available capacity: DENIED', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('scrims').doc('scrim_adv4').set({
+          title: 'Adversarial Scrim 4',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-05T18:00:00Z',
+          registrationDeadline: '2026-11-05T17:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 12,
+          rules: 'Rules',
+          status: 'registration-closed',
+          createdBy: 'admin1',
+          creatorName: 'Admin',
+          creatorRole: 'admin'
+        });
+      });
+
+      const member = testEnv.authenticatedContext('member1');
+      const db = member.firestore();
+
+      // Attempt to register when capacity is full
+      const batch = db.batch();
+      batch.set(db.collection('scrim_registrations').doc('scrim_adv4_member1'), {
+        id: 'scrim_adv4_member1',
+        scrimId: 'scrim_adv4',
+        game: 'Free Fire Max',
+        userId: 'member1',
+        userName: 'MEMBER1',
+        teamName: 'Team Phoenix',
+        contact: 'Discord#1234',
+        status: 'registered'
+      });
+      batch.update(db.collection('scrims').doc('scrim_adv4'), {
+        currentParticipants: 13
+      });
+      await assertFails(batch.commit());
+
+      // Attempt to register duplicate document with fake ID
+      await assertFails(
+        db.collection('scrim_registrations').doc('scrim_adv4_fake_id').set({
+          id: 'scrim_adv4_fake_id',
+          scrimId: 'scrim_adv4',
+          game: 'Free Fire Max',
+          userId: 'member1',
+          userName: 'MEMBER1',
+          teamName: 'Team Phoenix',
+          contact: 'Discord#1234',
+          status: 'registered'
+        })
+      );
+    });
+
+    // 5. Captain increments tournament currentTeams without a valid team registration
+    it('Scenario 5: Captain increments tournament currentTeams without valid team registration: DENIED', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('ff_capt').set({
+          uid: 'ff_capt',
+          displayName: 'FF Captain',
+          gamingUsername: 'FF_CAPT',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+        await db.collection('tournaments').doc('tourney_adv5').set({
+          name: 'Adversarial Tournament 5',
+          game: 'Free Fire Max',
+          description: 'Description',
+          startDate: '2026-12-01T10:00:00Z',
+          endDate: '2026-12-05T20:00:00Z',
+          registrationDeadline: '2026-11-28T23:59:59Z',
+          maxTeams: 16,
+          currentTeams: 0,
+          format: 'single-elimination',
+          rules: 'Rules',
+          prizePool: '$1000',
+          status: 'registration-open',
+          createdBy: 'admin1'
+        });
+      });
+
+      const capt = testEnv.authenticatedContext('ff_capt');
+      const db = capt.firestore();
+
+      // Standalone increment of tournament team counter without registration
+      await assertFails(
+        db.collection('tournaments').doc('tourney_adv5').update({
+          currentTeams: 1
+        })
+      );
+    });
+
+    // 6. Captain creates a tournament registration without the corresponding capacity update
+    it('Scenario 6: Captain creates tournament registration without capacity update: DENIED', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('ff_capt').set({
+          uid: 'ff_capt',
+          displayName: 'FF Captain',
+          gamingUsername: 'FF_CAPT',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+        await db.collection('tournaments').doc('tourney_adv6').set({
+          name: 'Adversarial Tournament 6',
+          game: 'Free Fire Max',
+          description: 'Description',
+          startDate: '2026-12-01T10:00:00Z',
+          endDate: '2026-12-05T20:00:00Z',
+          registrationDeadline: '2026-11-28T23:59:59Z',
+          maxTeams: 16,
+          currentTeams: 0,
+          format: 'single-elimination',
+          rules: 'Rules',
+          prizePool: '$1000',
+          status: 'registration-open',
+          createdBy: 'admin1'
+        });
+      });
+
+      const capt = testEnv.authenticatedContext('ff_capt');
+      const db = capt.firestore();
+
+      // Standalone registration write without updating tournament currentTeams
+      await assertFails(
+        db.collection('tournament_registrations').doc('tourney_adv6_ff_capt').set({
+          id: 'tourney_adv6_ff_capt',
+          tournamentId: 'tourney_adv6',
+          game: 'Free Fire Max',
+          captainUid: 'ff_capt',
+          captainName: 'FF Captain',
+          teamName: 'Red Phoenix Elite',
+          contact: 'Discord#5555',
+          roster: [{ name: 'Player 1', role: 'IGL' }],
+          status: 'registered'
+        })
+      );
+    });
+
+    // 7. Concurrent registrations attempt to claim the final available slot
+    it('Scenario 7: Concurrent registrations attempt to claim the final available slot: exactly one succeeds, second is DENIED', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('users').doc('member2').set({
+          uid: 'member2',
+          displayName: 'Member Two',
+          gamingUsername: 'MEMBER2',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('scrims').doc('scrim_adv7').set({
+          title: 'Adversarial Scrim 7 - Final Slot',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-05T18:00:00Z',
+          registrationDeadline: '2026-11-05T17:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 11,
+          rules: 'Rules',
+          status: 'registration-open',
+          createdBy: 'admin1',
+          creatorName: 'Admin',
+          creatorRole: 'admin'
+        });
+      });
+
+      const m1 = testEnv.authenticatedContext('member1');
+      const m2 = testEnv.authenticatedContext('member2');
+      const db1 = m1.firestore();
+      const db2 = m2.firestore();
+
+      // Member 1 claims the final slot via atomic batch
+      const b1 = db1.batch();
+      b1.set(db1.collection('scrim_registrations').doc('scrim_adv7_member1'), {
+        id: 'scrim_adv7_member1',
+        scrimId: 'scrim_adv7',
+        game: 'Free Fire Max',
+        userId: 'member1',
+        userName: 'MEMBER1',
+        teamName: 'Team One',
+        contact: 'Discord#1111',
+        status: 'registered'
+      });
+      b1.update(db1.collection('scrims').doc('scrim_adv7'), {
+        currentParticipants: 12,
+        status: 'registration-closed'
+      });
+      await assertSucceeds(b1.commit());
+
+      // Member 2 attempts to register for the now full scrim: FAIL
+      const b2 = db2.batch();
+      b2.set(db2.collection('scrim_registrations').doc('scrim_adv7_member2'), {
+        id: 'scrim_adv7_member2',
+        scrimId: 'scrim_adv7',
+        game: 'Free Fire Max',
+        userId: 'member2',
+        userName: 'MEMBER2',
+        teamName: 'Team Two',
+        contact: 'Discord#2222',
+        status: 'registered'
+      });
+      b2.update(db2.collection('scrims').doc('scrim_adv7'), {
+        currentParticipants: 13
+      });
+      await assertFails(b2.commit());
+    });
+
+    // 8. Withdrawal is repeated to attempt to decrement capacity twice
+    it('Scenario 8: Withdrawal is repeated to attempt to decrement capacity twice: first succeeds, second is DENIED', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('scrims').doc('scrim_adv8').set({
+          title: 'Adversarial Scrim 8',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-05T18:00:00Z',
+          registrationDeadline: '2026-11-05T17:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 1,
+          rules: 'Rules',
+          status: 'registration-open',
+          createdBy: 'admin1',
+          creatorName: 'Admin',
+          creatorRole: 'admin'
+        });
+        await db.collection('scrim_registrations').doc('scrim_adv8_member1').set({
+          id: 'scrim_adv8_member1',
+          scrimId: 'scrim_adv8',
+          game: 'Free Fire Max',
+          userId: 'member1',
+          userName: 'MEMBER1',
+          teamName: 'Team Phoenix',
+          contact: 'Discord#1234',
+          status: 'registered'
+        });
+      });
+
+      const member = testEnv.authenticatedContext('member1');
+      const db = member.firestore();
+
+      // First withdrawal via atomic batch: SUCCEED
+      const firstWithdrawBatch = db.batch();
+      firstWithdrawBatch.update(db.collection('scrim_registrations').doc('scrim_adv8_member1'), {
+        status: 'withdrawn'
+      });
+      firstWithdrawBatch.update(db.collection('scrims').doc('scrim_adv8'), {
+        currentParticipants: 0
+      });
+      await assertSucceeds(firstWithdrawBatch.commit());
+
+      // Repeated withdrawal to attempt to decrement capacity a second time: FAIL
+      const secondWithdrawBatch = db.batch();
+      secondWithdrawBatch.update(db.collection('scrim_registrations').doc('scrim_adv8_member1'), {
+        status: 'withdrawn'
+      });
+      secondWithdrawBatch.update(db.collection('scrims').doc('scrim_adv8'), {
+        currentParticipants: 0
+      });
+      await assertFails(secondWithdrawBatch.commit());
     });
   });
 });

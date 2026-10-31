@@ -255,12 +255,15 @@ service cloud.firestore {
     }
 
     // Verify approved member incrementing scrim participant slot by +1
-    function isValidMemberScrimIncrement() {
+    function isValidMemberScrimIncrement(scrimId) {
       return request.resource.data.currentParticipants == resource.data.currentParticipants + 1 &&
         resource.data.status in ['registration-open', 'scheduled'] &&
         resource.data.currentParticipants < resource.data.maxParticipants &&
         request.resource.data.currentParticipants <= resource.data.maxParticipants &&
         (!(resource.data.registrationDeadline is timestamp) || request.time < resource.data.registrationDeadline) &&
+        (!exists(/databases/$(database)/documents/scrim_registrations/$(scrimId + '_' + request.auth.uid)) || get(/databases/$(database)/documents/scrim_registrations/$(scrimId + '_' + request.auth.uid)).data.status == 'withdrawn') &&
+        existsAfter(/databases/$(database)/documents/scrim_registrations/$(scrimId + '_' + request.auth.uid)) &&
+        getAfter(/databases/$(database)/documents/scrim_registrations/$(scrimId + '_' + request.auth.uid)).data.status == 'registered' &&
         (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentParticipants', 'updatedAt']) ||
           (
@@ -272,9 +275,12 @@ service cloud.firestore {
     }
 
     // Verify approved member decrementing scrim participant slot by -1
-    function isValidMemberScrimDecrement() {
+    function isValidMemberScrimDecrement(scrimId) {
       return request.resource.data.currentParticipants == resource.data.currentParticipants - 1 &&
         request.resource.data.currentParticipants >= 0 &&
+        exists(/databases/$(database)/documents/scrim_registrations/$(scrimId + '_' + request.auth.uid)) &&
+        get(/databases/$(database)/documents/scrim_registrations/$(scrimId + '_' + request.auth.uid)).data.status == 'registered' &&
+        getAfter(/databases/$(database)/documents/scrim_registrations/$(scrimId + '_' + request.auth.uid)).data.status == 'withdrawn' &&
         (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentParticipants', 'updatedAt']) ||
           (
@@ -286,7 +292,7 @@ service cloud.firestore {
     }
 
     // Verify division captain incrementing tournament team slot by +1
-    function isValidCaptainTournamentIncrement() {
+    function isValidCaptainTournamentIncrement(tournamentId) {
       return isCaptainOfGame(resource.data.game) &&
         isCaptainOfGame(request.resource.data.game) &&
         request.resource.data.currentTeams == resource.data.currentTeams + 1 &&
@@ -294,6 +300,9 @@ service cloud.firestore {
         resource.data.currentTeams < resource.data.maxTeams &&
         request.resource.data.currentTeams <= resource.data.maxTeams &&
         (!(resource.data.registrationDeadline is timestamp) || request.time < resource.data.registrationDeadline) &&
+        (!exists(/databases/$(database)/documents/tournament_registrations/$(tournamentId + '_' + request.auth.uid)) || get(/databases/$(database)/documents/tournament_registrations/$(tournamentId + '_' + request.auth.uid)).data.status == 'withdrawn') &&
+        existsAfter(/databases/$(database)/documents/tournament_registrations/$(tournamentId + '_' + request.auth.uid)) &&
+        getAfter(/databases/$(database)/documents/tournament_registrations/$(tournamentId + '_' + request.auth.uid)).data.status == 'registered' &&
         (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentTeams', 'updatedAt']) ||
           (
@@ -305,11 +314,14 @@ service cloud.firestore {
     }
 
     // Verify division captain decrementing tournament team slot by -1
-    function isValidCaptainTournamentDecrement() {
+    function isValidCaptainTournamentDecrement(tournamentId) {
       return isCaptainOfGame(resource.data.game) &&
         isCaptainOfGame(request.resource.data.game) &&
         request.resource.data.currentTeams == resource.data.currentTeams - 1 &&
         request.resource.data.currentTeams >= 0 &&
+        exists(/databases/$(database)/documents/tournament_registrations/$(tournamentId + '_' + request.auth.uid)) &&
+        get(/databases/$(database)/documents/tournament_registrations/$(tournamentId + '_' + request.auth.uid)).data.status in ['registered', 'approved'] &&
+        getAfter(/databases/$(database)/documents/tournament_registrations/$(tournamentId + '_' + request.auth.uid)).data.status == 'withdrawn' &&
         (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentTeams', 'updatedAt']) ||
           (
@@ -770,7 +782,7 @@ service cloud.firestore {
         // Case 3: Approved Member registering/withdrawing (strictly +1 or -1 slot adjustment)
         (
           isApprovedMember() &&
-          (isValidMemberScrimIncrement() || isValidMemberScrimDecrement())
+          (isValidMemberScrimIncrement(scrimId) || isValidMemberScrimDecrement(scrimId))
         )
       );
 
@@ -797,6 +809,7 @@ service cloud.firestore {
         get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.currentParticipants < get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.maxParticipants &&
         (!(get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.registrationDeadline is timestamp) || request.time < get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.registrationDeadline) &&
         get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.game == request.resource.data.game &&
+        getAfter(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.currentParticipants == get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.currentParticipants + 1 &&
         isValidScrimRegistration(request.resource.data);
 
       // Update: Admin or registrant withdrawing their registration
@@ -804,7 +817,9 @@ service cloud.firestore {
         isAdmin() ||
         (
           isOwner(resource.data.userId) &&
+          resource.data.status == 'registered' &&
           request.resource.data.status == 'withdrawn' &&
+          getAfter(/databases/$(database)/documents/scrims/$(resource.data.scrimId)).data.currentParticipants == get(/databases/$(database)/documents/scrims/$(resource.data.scrimId)).data.currentParticipants - 1 &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'withdrawnAt'])
         )
       );
@@ -824,8 +839,8 @@ service cloud.firestore {
       // Update: Admin or Division Captain adjusting team slot count on team registration/withdrawal
       allow update: if isValidTournament(request.resource.data) && (
         isAdmin() ||
-        isValidCaptainTournamentIncrement() ||
-        isValidCaptainTournamentDecrement()
+        isValidCaptainTournamentIncrement(tournamentId) ||
+        isValidCaptainTournamentDecrement(tournamentId)
       );
 
       // Delete: Admin only
@@ -844,6 +859,7 @@ service cloud.firestore {
         get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.currentTeams < get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.maxTeams &&
         (!(get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.registrationDeadline is timestamp) || request.time < get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.registrationDeadline) &&
         get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.game == request.resource.data.game &&
+        getAfter(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.currentTeams == get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.currentTeams + 1 &&
         (isAdmin() || isCaptainOfGame(request.resource.data.game)) &&
         request.resource.data.captainUid == request.auth.uid &&
         registrationId == request.resource.data.tournamentId + '_' + request.auth.uid &&
@@ -857,7 +873,9 @@ service cloud.firestore {
         isAdmin() ||
         (
           isOwner(resource.data.captainUid) &&
+          resource.data.status in ['registered', 'approved'] &&
           request.resource.data.status == 'withdrawn' &&
+          getAfter(/databases/$(database)/documents/tournaments/$(resource.data.tournamentId)).data.currentTeams == get(/databases/$(database)/documents/tournaments/$(resource.data.tournamentId)).data.currentTeams - 1 &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'contact'])
         )
       );
