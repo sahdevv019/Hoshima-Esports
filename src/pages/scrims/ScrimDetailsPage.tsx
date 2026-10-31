@@ -146,7 +146,7 @@ export const ScrimDetailsPage: React.FC = () => {
         userId: currentUser.uid,
         userName: userProfile?.gamingUsername || userProfile?.displayName || 'Operative',
         teamName: teamName.trim() || 'Solo Operative',
-        contact: contact.trim() || userProfile?.email || 'N/A',
+        contact: contact.trim() || (userProfile?.gamingUsername ? `@${userProfile.gamingUsername}` : 'Operative Coordinator'),
         game: scrim.game
       });
 
@@ -763,13 +763,13 @@ export const ScrimDetailsPage: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: '#7a9ab5', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Leader Tactical Contact (Discord / Phone / IGN)
+                  Leader Tactical Coordinate (Discord Handle / IGN)
                 </label>
                 <input
                   type="text"
                   value={contact}
                   onChange={(e) => setContact(e.target.value)}
-                  placeholder="e.g. Discord: #axiom-019"
+                  placeholder="e.g. Discord: @axiom_ops"
                   style={{
                     width: '100%',
                     background: 'rgba(255,255,255,.05)',

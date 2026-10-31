@@ -6,6 +6,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   query,
   where,
   orderBy,
@@ -332,7 +333,8 @@ export function subscribeToTournamentMatches(
 
 /**
  * Generate Deterministic Single Elimination Tournament Bracket
- * Creates Round 1 matches, pairing seeds or registered teams. Handles odd team byes.
+ * Generates all rounds of the bracket tree upfront, pairing teams and byes in Round 1,
+ * and automatically advancing bye winners into their Round 2 feeder matches.
  */
 export async function generateSingleEliminationBracket(
   tournamentId: string,
@@ -352,18 +354,21 @@ export async function generateSingleEliminationBracket(
     where('competitionId', '==', tournamentId)
   );
   const existingSnap = await getDocs(existingQ);
+  const deleteBatch = writeBatch(db);
   for (const docSnap of existingSnap.docs) {
-    await deleteDoc(docSnap.ref);
+    deleteBatch.delete(docSnap.ref);
   }
+  await deleteBatch.commit();
 
-  // Calculate bracket size (next power of 2: 2, 4, 8, 16, 32)
+  // Calculate bracket dimensions
   const powerOfTwo = Math.pow(2, Math.ceil(Math.log2(teams.length)));
+  const totalRounds = Math.log2(powerOfTwo);
   const byesNeeded = powerOfTwo - teams.length;
 
+  // Round 1 pairings
   const round1Pairs: { teamA: { id: string; name: string }; teamB: { id: string; name: string } }[] = [];
   const assignedTeams = [...teams];
 
-  // Fill pairs with teams and byes
   for (let i = 0; i < powerOfTwo / 2; i++) {
     const teamA = assignedTeams.shift() || { id: 'tbd', name: 'TBD' };
     let teamB: { id: string; name: string };
@@ -376,34 +381,89 @@ export async function generateSingleEliminationBracket(
     round1Pairs.push({ teamA, teamB });
   }
 
-  // Create Round 1 Match documents
-  let matchNumber = 1;
-  for (const pair of round1Pairs) {
-    const newDoc = doc(matchesRef);
-    const isByeMatch = pair.teamB.id === 'bye';
+  // Pre-generate match references for all rounds so we can link feeder slots
+  const matchRefs = new Map<string, any>();
+  const matchPayloads = new Map<string, any>();
 
-    await setDoc(newDoc, {
+  // 1. Prepare Round 1 matches
+  for (let m = 1; m <= powerOfTwo / 2; m++) {
+    const pair = round1Pairs[m - 1];
+    const isByeMatch = pair.teamB.id === 'bye';
+    const key = `1_${m}`;
+    const docRef = doc(matchesRef);
+    matchRefs.set(key, docRef);
+
+    const payload: any = {
       competitionType: 'tournament',
       competitionId: tournamentId,
       game,
       round: 1,
-      matchNumber,
+      matchNumber: m,
       teamA: pair.teamA,
       teamB: pair.teamB,
       status: isByeMatch ? 'completed' : 'scheduled',
-      winnerId: isByeMatch ? pair.teamA.id : null,
-      winnerName: isByeMatch ? pair.teamA.name : null,
-      scheduledTime: serverTimestamp(),
-      completedAt: isByeMatch ? serverTimestamp() : null,
       isConfirmed: isByeMatch,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
-    });
-
-    matchNumber++;
+    };
+    if (isByeMatch) {
+      payload.winnerId = pair.teamA.id;
+      payload.winnerName = pair.teamA.name;
+      payload.completedAt = serverTimestamp();
+    }
+    matchPayloads.set(key, payload);
   }
 
-  // Set tournament status to in-progress
+  // 2. Prepare Subsequent Rounds (Round 2 to Finals)
+  for (let r = 2; r <= totalRounds; r++) {
+    const matchesInRound = powerOfTwo / Math.pow(2, r);
+    for (let m = 1; m <= matchesInRound; m++) {
+      const key = `${r}_${m}`;
+      const docRef = doc(matchesRef);
+      matchRefs.set(key, docRef);
+
+      matchPayloads.set(key, {
+        competitionType: 'tournament',
+        competitionId: tournamentId,
+        game,
+        round: r,
+        matchNumber: m,
+        teamA: { id: 'tbd', name: 'TBD' },
+        teamB: { id: 'tbd', name: 'TBD' },
+        status: 'scheduled',
+        isConfirmed: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    }
+  }
+
+  // 3. Advance Round 1 BYE winners directly into Round 2 feeder matches
+  for (let m = 1; m <= powerOfTwo / 2; m++) {
+    const r1Payload = matchPayloads.get(`1_${m}`);
+    if (r1Payload && r1Payload.teamB.id === 'bye') {
+      const nextMatchNum = Math.ceil(m / 2);
+      const isTeamA = m % 2 !== 0;
+      const r2Payload = matchPayloads.get(`2_${nextMatchNum}`);
+      if (r2Payload) {
+        if (isTeamA) {
+          r2Payload.teamA = { ...r1Payload.teamA };
+        } else {
+          r2Payload.teamB = { ...r1Payload.teamA };
+        }
+      }
+    }
+  }
+
+  // 4. Batch commit all matches across all rounds
+  const createBatch = writeBatch(db);
+  for (const [key, payload] of matchPayloads.entries()) {
+    const docRef = matchRefs.get(key);
+    createBatch.set(docRef, payload);
+  }
+  await createBatch.commit();
+
+  // 5. Update tournament status
   const tournRef = doc(db, 'tournaments', tournamentId);
   await updateDoc(tournRef, {
     status: 'in-progress',
@@ -484,6 +544,15 @@ export async function submitProposedMatchResult(
     throw new Error('Official results have already been confirmed by Administrator.');
   }
 
+  // Prevent duplicate submission by the same captain with identical scores
+  if (
+    matchData.proposedBy === proposedByUid &&
+    matchData.teamA?.score === scoreA &&
+    matchData.teamB?.score === scoreB
+  ) {
+    throw new Error('This proposed score has already been submitted and is pending administrator confirmation.');
+  }
+
   await updateDoc(matchRef, {
     'teamA.score': scoreA,
     'teamB.score': scoreB,
@@ -545,29 +614,35 @@ export async function confirmTournamentMatchResult(
     const allMatches: CompetitiveMatch[] = [];
     allMatchesSnap.forEach((d) => allMatches.push({ ...(d.data() as Omit<CompetitiveMatch, 'id'>), id: d.id }));
 
-    // Check if single elimination finals
+    // Single elimination bracket advancement and championship crowning
     if (typeof matchData.round === 'number' || matchData.round === 'Finals') {
-      // Check if next round match exists for the winner to advance to
+      const currentRound = typeof matchData.round === 'number' ? matchData.round : 1;
       const currentMatchNum = matchData.matchNumber || 1;
-      const nextMatchNum = Math.ceil(currentMatchNum / 2);
-      const nextRound = (typeof matchData.round === 'number' ? matchData.round : 1) + 1;
-
-      // Find existing next round match or create if needed
-      const nextMatch = allMatches.find(
-        (m) => m.round === nextRound && m.matchNumber === nextMatchNum
+      const maxRound = Math.max(
+        ...allMatches.map((m) => (typeof m.round === 'number' ? m.round : 1))
       );
 
-      if (nextMatch) {
-        // Slot team into Team A (if odd matchNum) or Team B (if even matchNum)
+      // If there is a subsequent round, advance/correct the winner into the feeder match
+      if (currentRound < maxRound) {
+        const nextRound = currentRound + 1;
+        const nextMatchNum = Math.ceil(currentMatchNum / 2);
         const isTeamA = currentMatchNum % 2 !== 0;
-        const targetRef = doc(db, 'matches', nextMatch.id);
-        await updateDoc(targetRef, {
-          [isTeamA ? 'teamA' : 'teamB']: { id: result.winnerId, name: result.winnerName },
-          updatedAt: serverTimestamp()
-        });
-      } else if (allMatches.length > 1 && allMatches.every((m) => m.id === matchId || m.isConfirmed)) {
-        // Tournament completed! Crown champion
-        const runnerUp = result.winnerName === matchData.teamA.name ? matchData.teamB.name : matchData.teamA.name;
+
+        const nextMatch = allMatches.find(
+          (m) => m.round === nextRound && m.matchNumber === nextMatchNum
+        );
+
+        if (nextMatch) {
+          const targetRef = doc(db, 'matches', nextMatch.id);
+          await updateDoc(targetRef, {
+            [isTeamA ? 'teamA' : 'teamB']: { id: result.winnerId, name: result.winnerName },
+            updatedAt: serverTimestamp()
+          });
+        }
+      } else {
+        // Finals match completed! Crown champion and runner-up
+        const runnerUp =
+          result.winnerName === matchData.teamA.name ? matchData.teamB.name : matchData.teamA.name;
         const tournRef = doc(db, 'tournaments', tournamentId);
         await updateDoc(tournRef, {
           champion: result.winnerName,

@@ -247,11 +247,77 @@ service cloud.firestore {
     }
 
     function isValidOptionalString(data, field, minLen, maxLen) {
-      return !(field in data) || (data[field] is string && data[field].size() >= minLen && data[field].size() <= maxLen);
+      return !(field in data) || data[field] == null || (data[field] is string && data[field].size() >= minLen && data[field].size() <= maxLen);
     }
 
     function isValidOptionalTimestamp(data, field) {
-      return !(field in data) || data[field] is timestamp;
+      return !(field in data) || data[field] == null || data[field] is timestamp;
+    }
+
+    // Verify approved member incrementing scrim participant slot by +1
+    function isValidMemberScrimIncrement() {
+      return request.resource.data.currentParticipants == resource.data.currentParticipants + 1 &&
+        resource.data.status in ['registration-open', 'scheduled'] &&
+        resource.data.currentParticipants < resource.data.maxParticipants &&
+        request.resource.data.currentParticipants <= resource.data.maxParticipants &&
+        (!(resource.data.registrationDeadline is timestamp) || request.time < resource.data.registrationDeadline) &&
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentParticipants', 'updatedAt']) ||
+          (
+            request.resource.data.currentParticipants == resource.data.maxParticipants &&
+            request.resource.data.status == 'registration-closed' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentParticipants', 'updatedAt', 'status'])
+          )
+        );
+    }
+
+    // Verify approved member decrementing scrim participant slot by -1
+    function isValidMemberScrimDecrement() {
+      return request.resource.data.currentParticipants == resource.data.currentParticipants - 1 &&
+        request.resource.data.currentParticipants >= 0 &&
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentParticipants', 'updatedAt']) ||
+          (
+            resource.data.status == 'registration-closed' &&
+            request.resource.data.status == 'registration-open' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentParticipants', 'updatedAt', 'status'])
+          )
+        );
+    }
+
+    // Verify division captain incrementing tournament team slot by +1
+    function isValidCaptainTournamentIncrement() {
+      return isCaptainOfGame(resource.data.game) &&
+        isCaptainOfGame(request.resource.data.game) &&
+        request.resource.data.currentTeams == resource.data.currentTeams + 1 &&
+        resource.data.status in ['registration-open', 'upcoming'] &&
+        resource.data.currentTeams < resource.data.maxTeams &&
+        request.resource.data.currentTeams <= resource.data.maxTeams &&
+        (!(resource.data.registrationDeadline is timestamp) || request.time < resource.data.registrationDeadline) &&
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentTeams', 'updatedAt']) ||
+          (
+            request.resource.data.currentTeams == resource.data.maxTeams &&
+            request.resource.data.status == 'registration-closed' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentTeams', 'updatedAt', 'status'])
+          )
+        );
+    }
+
+    // Verify division captain decrementing tournament team slot by -1
+    function isValidCaptainTournamentDecrement() {
+      return isCaptainOfGame(resource.data.game) &&
+        isCaptainOfGame(request.resource.data.game) &&
+        request.resource.data.currentTeams == resource.data.currentTeams - 1 &&
+        request.resource.data.currentTeams >= 0 &&
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentTeams', 'updatedAt']) ||
+          (
+            resource.data.status == 'registration-closed' &&
+            request.resource.data.status == 'registration-open' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentTeams', 'updatedAt', 'status'])
+          )
+        );
     }
 
     // Supports both Firestore Timestamp and ISO date string representations
@@ -701,10 +767,10 @@ service cloud.firestore {
           request.resource.data.createdBy == resource.data.createdBy &&
           (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt)
         ) ||
-        // Case 3: Approved Member registering/withdrawing (affects participant counter and timestamp)
+        // Case 3: Approved Member registering/withdrawing (strictly +1 or -1 slot adjustment)
         (
           isApprovedMember() &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentParticipants', 'updatedAt'])
+          (isValidMemberScrimIncrement() || isValidMemberScrimDecrement())
         )
       );
 
@@ -720,12 +786,17 @@ service cloud.firestore {
       // Public and member transparent discovery of registered rosters
       allow read: if true;
 
-      // Create: Approved member registering themselves with 'registered' status
+      // Create: Approved member registering themselves with 'registered' status and valid open scrim
       allow create: if isApprovedMember() &&
         request.resource.data.userId == request.auth.uid &&
         registrationId == request.resource.data.scrimId + '_' + request.auth.uid &&
         request.resource.data.status == 'registered' &&
         (!('withdrawnAt' in request.resource.data)) &&
+        exists(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)) &&
+        get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.status in ['registration-open', 'scheduled'] &&
+        get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.currentParticipants < get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.maxParticipants &&
+        (!(get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.registrationDeadline is timestamp) || request.time < get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.registrationDeadline) &&
+        get(/databases/$(database)/documents/scrims/$(request.resource.data.scrimId)).data.game == request.resource.data.game &&
         isValidScrimRegistration(request.resource.data);
 
       // Update: Admin or registrant withdrawing their registration
@@ -747,9 +818,17 @@ service cloud.firestore {
       // Public discovery of tournament brackets, schedules, and prize pools
       allow read: if true;
 
-      // Create, Update, Delete: Admin only
+      // Create: Admin only
       allow create: if isAdmin() && isValidTournament(request.resource.data);
-      allow update: if isAdmin() && isValidTournament(request.resource.data);
+
+      // Update: Admin or Division Captain adjusting team slot count on team registration/withdrawal
+      allow update: if isValidTournament(request.resource.data) && (
+        isAdmin() ||
+        isValidCaptainTournamentIncrement() ||
+        isValidCaptainTournamentDecrement()
+      );
+
+      // Delete: Admin only
       allow delete: if isAdmin();
     }
 
@@ -758,15 +837,20 @@ service cloud.firestore {
       // Public discovery of verified tournament team registrations & seeds
       allow read: if true;
 
-      // Create: Division captain or admin registering team with 'registered' status
-      allow create: if (isAdmin() || isCaptainOfGame(request.resource.data.game)) &&
+      // Create: Division captain or admin registering team with 'registered' status and open tournament
+      allow create: if isValidTournamentRegistration(request.resource.data) &&
+        exists(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)) &&
+        get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.status in ['registration-open', 'upcoming'] &&
+        get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.currentTeams < get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.maxTeams &&
+        (!(get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.registrationDeadline is timestamp) || request.time < get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.registrationDeadline) &&
+        get(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId)).data.game == request.resource.data.game &&
+        (isAdmin() || isCaptainOfGame(request.resource.data.game)) &&
         request.resource.data.captainUid == request.auth.uid &&
         registrationId == request.resource.data.tournamentId + '_' + request.auth.uid &&
         request.resource.data.status == 'registered' &&
         (!('approvedAt' in request.resource.data) || isAdmin()) &&
         (!('reviewedBy' in request.resource.data) || isAdmin()) &&
-        (!('seed' in request.resource.data) || isAdmin()) &&
-        isValidTournamentRegistration(request.resource.data);
+        (!('seed' in request.resource.data) || isAdmin());
 
       // Update: Admin (review, seed, approve/reject) or Captain withdrawing
       allow update: if isValidTournamentRegistration(request.resource.data) && (
@@ -787,19 +871,25 @@ service cloud.firestore {
       // Public discovery of match schedules, scores, and verified results
       allow read: if true;
 
-      // Create: Admin or Division Captain for scrim matches
-      allow create: if (
+      // Create: Admin or Division Captain for unconfirmed scrim matches
+      allow create: if isValidMatch(request.resource.data) && (
         isAdmin() ||
-        (isCaptainOfGame(request.resource.data.game) && request.resource.data.competitionType == 'scrim')
-      ) && isValidMatch(request.resource.data);
+        (
+          isCaptainOfGame(request.resource.data.game) &&
+          request.resource.data.competitionType == 'scrim' &&
+          request.resource.data.isConfirmed == false &&
+          !('confirmedBy' in request.resource.data)
+        )
+      );
 
-      // Update: Admin or Captain proposing unconfirmed scrim scores
+      // Update: Admin or Captain proposing unconfirmed scrim scores (cannot self-confirm or edit confirmed matches)
       allow update: if isValidMatch(request.resource.data) && (
         isAdmin() ||
         (
+          resource.data.isConfirmed == false &&
+          request.resource.data.isConfirmed == false &&
           isCaptainOfGame(resource.data.game) &&
           isCaptainOfGame(request.resource.data.game) &&
-          request.resource.data.isConfirmed == false &&
           request.resource.data.proposedBy == request.auth.uid &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['confirmedBy', 'isConfirmed'])
         )

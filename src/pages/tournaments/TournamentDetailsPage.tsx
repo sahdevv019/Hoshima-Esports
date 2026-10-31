@@ -141,7 +141,7 @@ export const TournamentDetailsPage: React.FC = () => {
         captainUid: currentUser.uid,
         captainName: userProfile?.gamingUsername || userProfile?.displayName || 'Captain',
         teamName: teamName.trim() || `${userProfile?.gamingUsername || 'Hoshima'} SQUAD`,
-        contact: contact.trim() || userProfile?.email || 'N/A',
+        contact: contact.trim() || (userProfile?.gamingUsername ? `@${userProfile.gamingUsername}` : 'Captain Coordinator'),
         roster: rosterMembers
       });
 
@@ -867,13 +867,13 @@ export const TournamentDetailsPage: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: '#7a9ab5', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Captain Tactical Contact (Discord / Phone)
+                  Captain Tactical Coordinate (Discord Handle / IGN)
                 </label>
                 <input
                   type="text"
                   value={contact}
                   onChange={(e) => setContact(e.target.value)}
-                  placeholder="e.g. Discord: #captain-99"
+                  placeholder="e.g. Discord: @captain_99"
                   style={{
                     width: '100%',
                     background: 'rgba(255,255,255,.05)',

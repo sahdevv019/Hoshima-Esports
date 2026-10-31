@@ -1009,6 +1009,13 @@ describe('Firestore Security Rules', () => {
           status: 'cancelled'
         })
       );
+
+      // Attempting to arbitrarily jump slot counter by +5: FAIL
+      await assertFails(
+        db.collection('scrims').doc('scrim_slot').update({
+          currentParticipants: 6
+        })
+      );
     });
 
     it('captain can delete own scrim, but not another captain scrim', async () => {
@@ -1086,6 +1093,22 @@ describe('Firestore Security Rules', () => {
           preferredGame: 'Free Fire Max',
           role: 'member',
           status: 'approved'
+        });
+        await adminDb.collection('scrims').doc('scrim1').set({
+          title: 'Daily FF Scrim',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-01T18:00:00Z',
+          registrationDeadline: '2026-11-01T17:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 0,
+          rules: 'No emulators',
+          status: 'registration-open',
+          createdBy: 'admin1',
+          creatorName: 'Admin',
+          creatorRole: 'admin'
         });
       });
 
@@ -1202,6 +1225,67 @@ describe('Firestore Security Rules', () => {
         })
       );
     });
+
+    it('member CANNOT register if scrim does not exist or is closed', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('member1').set({
+          uid: 'member1',
+          displayName: 'Member One',
+          gamingUsername: 'MEMBER1',
+          preferredGame: 'Free Fire Max',
+          role: 'member',
+          status: 'approved'
+        });
+        await db.collection('scrims').doc('scrim_closed').set({
+          title: 'Closed FF Scrim',
+          game: 'Free Fire Max',
+          squad: 'Free Fire Max',
+          map: 'Bermuda',
+          format: 'Battle Royale',
+          scheduledTime: '2026-11-01T18:00:00Z',
+          registrationDeadline: '2026-11-01T17:00:00Z',
+          maxParticipants: 12,
+          currentParticipants: 12,
+          rules: 'No emulators',
+          status: 'registration-closed',
+          createdBy: 'admin1',
+          creatorName: 'Admin',
+          creatorRole: 'admin'
+        });
+      });
+
+      const member = testEnv.authenticatedContext('member1');
+      const db = member.firestore();
+
+      // Scrim does not exist: FAIL
+      await assertFails(
+        db.collection('scrim_registrations').doc('nonexistent_member1').set({
+          id: 'nonexistent_member1',
+          scrimId: 'nonexistent',
+          game: 'Free Fire Max',
+          userId: 'member1',
+          userName: 'MEMBER1',
+          teamName: 'Team Phoenix',
+          contact: 'Discord#1234',
+          status: 'registered'
+        })
+      );
+
+      // Scrim is closed: FAIL
+      await assertFails(
+        db.collection('scrim_registrations').doc('scrim_closed_member1').set({
+          id: 'scrim_closed_member1',
+          scrimId: 'scrim_closed',
+          game: 'Free Fire Max',
+          userId: 'member1',
+          userName: 'MEMBER1',
+          teamName: 'Team Phoenix',
+          contact: 'Discord#1234',
+          status: 'registered'
+        })
+      );
+    });
   });
 
   describe('tournaments collection', () => {
@@ -1267,6 +1351,53 @@ describe('Firestore Security Rules', () => {
         })
       );
     });
+
+    it('division captain can increment tournament currentTeams by 1, but cannot jump by 5', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('ff_capt').set({
+          uid: 'ff_capt',
+          displayName: 'FF Captain',
+          gamingUsername: 'FF_CAPT',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+        await db.collection('tournaments').doc('t_slot').set({
+          name: 'Tournament Slot Drill',
+          game: 'Free Fire Max',
+          description: 'Tournament overview',
+          startDate: '2026-12-01T10:00:00Z',
+          endDate: '2026-12-05T20:00:00Z',
+          registrationDeadline: '2026-11-28T23:59:59Z',
+          maxTeams: 16,
+          currentTeams: 0,
+          format: 'single-elimination',
+          rules: 'Rules',
+          prizePool: '$1000',
+          status: 'registration-open',
+          createdBy: 'admin1'
+        });
+      });
+
+      const capt = testEnv.authenticatedContext('ff_capt');
+      const db = capt.firestore();
+
+      // Increment by 1: SUCCEED
+      await assertSucceeds(
+        db.collection('tournaments').doc('t_slot').update({
+          currentTeams: 1
+        })
+      );
+
+      // Jump by 5: FAIL
+      await assertFails(
+        db.collection('tournaments').doc('t_slot').update({
+          currentTeams: 6
+        })
+      );
+    });
   });
 
   describe('tournament_registrations collection', () => {
@@ -1289,6 +1420,36 @@ describe('Firestore Security Rules', () => {
           role: 'captain',
           status: 'approved',
           assignedSquad: 'Free Fire Max'
+        });
+        await db.collection('tournaments').doc('tourney1').set({
+          name: 'Hoshima Major Season 1',
+          game: 'Free Fire Max',
+          description: 'Grand seasonal championship',
+          startDate: '2026-12-01T10:00:00Z',
+          endDate: '2026-12-05T20:00:00Z',
+          registrationDeadline: '2026-11-28T23:59:59Z',
+          maxTeams: 16,
+          currentTeams: 0,
+          format: 'single-elimination',
+          rules: 'Official Rulebook 2026',
+          prizePool: '$5,000 USD',
+          status: 'registration-open',
+          createdBy: 'admin1'
+        });
+        await db.collection('tournaments').doc('tourney2').set({
+          name: 'Hoshima Major Season 2',
+          game: 'Free Fire Max',
+          description: 'Grand seasonal championship 2',
+          startDate: '2026-12-01T10:00:00Z',
+          endDate: '2026-12-05T20:00:00Z',
+          registrationDeadline: '2026-11-28T23:59:59Z',
+          maxTeams: 16,
+          currentTeams: 0,
+          format: 'single-elimination',
+          rules: 'Official Rulebook 2026',
+          prizePool: '$5,000 USD',
+          status: 'registration-open',
+          createdBy: 'admin1'
         });
       });
 
@@ -1418,6 +1579,37 @@ describe('Firestore Security Rules', () => {
       // Captain attempts to confirm match: FAIL
       await assertFails(
         db.collection('matches').doc('match_scrim').update({
+          isConfirmed: true,
+          confirmedBy: 'ff_capt'
+        })
+      );
+    });
+
+    it('captain CANNOT create confirmed match', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('users').doc('ff_capt').set({
+          uid: 'ff_capt',
+          displayName: 'FF Captain',
+          gamingUsername: 'FF_CAPT',
+          preferredGame: 'Free Fire Max',
+          role: 'captain',
+          status: 'approved',
+          assignedSquad: 'Free Fire Max'
+        });
+      });
+
+      const capt = testEnv.authenticatedContext('ff_capt');
+      const db = capt.firestore();
+
+      await assertFails(
+        db.collection('matches').doc('match_confirmed_hack').set({
+          competitionType: 'scrim',
+          competitionId: 'scrim1',
+          game: 'Free Fire Max',
+          teamA: { id: 'team1', name: 'Alpha' },
+          teamB: { id: 'team2', name: 'Beta' },
+          status: 'completed',
           isConfirmed: true,
           confirmedBy: 'ff_capt'
         })

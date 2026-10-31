@@ -54,7 +54,12 @@ export async function getConfirmedMatches(gameFilter?: string): Promise<Competit
   try {
     const snap = await getDocs(q);
     const matches: CompetitiveMatch[] = [];
-    snap.forEach((d) => matches.push({ ...(d.data() as Omit<CompetitiveMatch, 'id'>), id: d.id }));
+    snap.forEach((d) => {
+      const data = d.data() as Omit<CompetitiveMatch, 'id'>;
+      if (data.isConfirmed && data.confirmedBy) {
+        matches.push({ ...data, id: d.id });
+      }
+    });
     return matches;
   } catch (err) {
     console.warn('[Hoshima Stats] Error querying confirmed matches, returning baseline:', err);
